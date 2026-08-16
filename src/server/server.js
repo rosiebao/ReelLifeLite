@@ -33,8 +33,6 @@ if (fs.existsSync(configPath)) {
     anthropic: {
       modelId: process.env.ANTHROPIC_MODEL_ID || 'us.anthropic.claude-sonnet-5',
       maxTokens: parseInt(process.env.MAX_TOKENS) || 2048,
-      temperature: parseFloat(process.env.TEMPERATURE) || 0.7,
-      topP: parseFloat(process.env.TOP_P) || 0.9,
     },
     server: {
       port: parseInt(process.env.PORT) || 3000,
