@@ -1,0 +1,23 @@
+{
+  "aws": {
+    "region": "us-east-1",
+    "credentials": {
+      "accessKeyId": "YOUR_AWS_ACCESS_KEY_ID",
+      "secretAccessKey": "YOUR_AWS_SECRET_ACCESS_KEY",
+      "sessionToken": ""
+    }
+  },
+  "anthropic": {
+    "modelId": "anthropic.claude-3-5-sonnet-20250219-v2:0",
+    "maxTokens": 2048,
+    "temperature": 0.7,
+    "topP": 0.9
+  },
+  "server": {
+    "port": 3000,
+    "cors": {
+      "origin": "http://localhost:8000",
+      "credentials": true
+    }
+  }
+}
