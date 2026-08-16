@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI-guided interview">
+  <title>Interview in Progress - ReelLife</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .interview-page {
+      background: var(--color-white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .interview-header {
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--color-border-gray);
+    }
+
+    .back-button {
+      color: var(--color-navy);
+      font-size: 1.5rem;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+
+    .interview-title {
+      font-size: 1.125rem;
+      font-weight: 500;
+      color: var(--color-text-gray);
+    }
+
+    .timer {
+      font-size: 1rem;
+      color: var(--color-text-gray);
+    }
+
+    .end-button {
+      color: #EF4444;
+      font-weight: 600;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0.5rem 1rem;
+    }
+
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 80%;
+    }
+
+    .message.question {
+      align-self: flex-start;
+    }
+
+    .message.answer {
+      align-self: flex-end;
+    }
+
+    .message-bubble {
+      padding: 1rem 1.25rem;
+      border-radius: var(--radius-lg);
+      line-height: 1.6;
+    }
+
+    .message.question .message-bubble {
+      background: var(--color-navy);
+      color: var(--color-white);
+      border-bottom-left-radius: 0.25rem;
+    }
+
+    .message.answer .message-bubble {
+      background: var(--color-light-bg);
+      color: var(--color-navy);
+      border-bottom-right-radius: 0.25rem;
+    }
+
+    .waveform {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-top: 0.5rem;
+      height: 40px;
+    }
+
+    .waveform-bar {
+      width: 3px;
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 2px;
+      animation: wave 1.2s ease-in-out infinite;
+    }
+
+    .waveform-bar:nth-child(1) { height: 20%; animation-delay: 0s; }
+    .waveform-bar:nth-child(2) { height: 40%; animation-delay: 0.1s; }
+    .waveform-bar:nth-child(3) { height: 60%; animation-delay: 0.2s; }
+    .waveform-bar:nth-child(4) { height: 80%; animation-delay: 0.3s; }
+    .waveform-bar:nth-child(5) { height: 60%; animation-delay: 0.4s; }
+    .waveform-bar:nth-child(6) { height: 40%; animation-delay: 0.5s; }
+    .waveform-bar:nth-child(7) { height: 20%; animation-delay: 0.6s; }
+    .waveform-bar:nth-child(8) { height: 30%; animation-delay: 0.7s; }
+    .waveform-bar:nth-child(9) { height: 50%; animation-delay: 0.8s; }
+    .waveform-bar:nth-child(10) { height: 70%; animation-delay: 0.9s; }
+
+    @keyframes wave {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+
+    .loading-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.875rem;
+    }
+
+    .loading-dots {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .loading-dot {
+      width: 6px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+
+    .loading-dot:nth-child(1) { animation-delay: 0s; }
+    .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-8px); }
+    }
+
+    .interview-controls {
+      padding: 1.5rem 1rem 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      border-top: 1px solid var(--color-border-gray);
+    }
+
+    .record-button {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: var(--color-navy);
+      color: var(--color-white);
+      border: none;
+      font-size: 3rem;
+      cursor: pointer;
+      box-shadow: var(--shadow-lg);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .record-button:active {
+      transform: scale(0.95);
+    }
+
+    .record-hint {
+      font-size: 0.95rem;
+      color: var(--color-text-gray);
+    }
+
+    .control-buttons {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .control-btn {
+      background: none;
+      border: none;
+      color: var(--color-text-gray);
+      font-size: 1.25rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .control-btn span {
+      font-size: 0.75rem;
+    }
+
+    /* Chat input interface (for non-audio modes) */
+    .chat-input-container {
+      padding: 1rem;
+      border-top: 1px solid var(--color-border-gray);
+      background: var(--color-white);
+      display: none;
+    }
+
+    .chat-input-container.show {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 0.875rem 1rem;
+      border: 2px solid var(--color-border-gray);
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-family: var(--font-sans);
+      resize: none;
+      max-height: 120px;
+      min-height: 48px;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: var(--color-gold);
+    }
+
+    .send-button {
+      width: 48px;
+      height: 48px;
+      background: var(--color-gold);
+      color: var(--color-white);
+      border: none;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+
+    .send-button:active {
+      transform: scale(0.95);
+    }
+
+    .send-button:disabled {
+      background: var(--color-border-gray);
+      cursor: not-allowed;
+    }
+
+    /* More options modal */
+    .more-modal {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--color-white);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+      padding: 1.5rem;
+      z-index: 200;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+    }
+
+    .more-modal.show {
+      transform: translateY(0);
+    }
+
+    .more-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 199;
+      display: none;
+    }
+
+    .more-modal-overlay.show {
+      display: block;
+    }
+
+    .more-modal-header {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      text-align: center;
+      color: var(--color-navy);
+    }
+
+    .more-option-btn {
+      width: 100%;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      background: var(--color-light-bg);
+      border: 2px solid transparent;
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      color: var(--color-navy);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .more-option-btn:hover {
+      border-color: var(--color-gold);
+      background: #FFF9F0;
+    }
+
+    .more-option-btn .icon {
+      font-size: 1.5rem;
+    }
+
+    .more-option-btn .label {
+      flex: 1;
+      text-align: left;
+      font-weight: 500;
+    }
+
+    .more-cancel-btn {
+      width: 100%;
+      padding: 1rem;
+      background: var(--color-white);
+      border: 2px solid var(--color-border-gray);
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      color: var(--color-text-gray);
+      cursor: pointer;
+      font-weight: 500;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="interview-page">
+    <div class="interview-header">
+      <button class="back-button" onclick="window.history.back()">‹</button>
+      <div class="interview-title">Interview in Progress</div>
+      <div class="timer">05:32</div>
+      <button class="end-button" onclick="window.location.href='chapter-preview.html'">End</button>
+    </div>
+
+    <div class="chat-container">
+      <div class="message question">
+        <div class="message-bubble">
+          Can you tell me about the first day you arrived in America?
+        </div>
+      </div>
+
+      <div class="message answer">
+        <div class="message-bubble">
+          Yes, I arrived in Seattle on a rainy day in March 1998. I was 18 years old, I didn't know anyone. I had one suitcase and $200 in my pocket...
+        </div>
+        <div class="waveform">
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+          <div class="waveform-bar"></div>
+        </div>
+        <div class="loading-indicator">
+          <span class="loading-dots">
+            <span class="loading-dot"></span>
+            <span class="loading-dot"></span>
+            <span class="loading-dot"></span>
+          </span>
+        </div>
+      </div>
+
+      <div class="message question">
+        <div class="message-bubble">
+          What do you remember most from that day?
+        </div>
+      </div>
+
+      <div class="message answer">
+        <div class="message-bubble">
+          The smell of the ocean, the cold wind, and how big everything felt...
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio recording controls (for audio mode) -->
+    <div class="interview-controls" id="audioControls">
+      <button class="record-button" id="recordButton">
+        🎤
+      </button>
+      <p class="record-hint">Tap to pause</p>
+
+      <div class="control-buttons">
+        <button class="control-btn" id="captionsBtn">
+          <span style="font-size: 1.5rem;">CC</span>
+          <span>Captions</span>
+        </button>
+        <button class="control-btn" id="moreBtn">
+          <span style="font-size: 1.5rem;">⋯</span>
+          <span>More</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat input controls (for text/file upload modes) -->
+    <div class="chat-input-container" id="chatInputContainer">
+      <textarea class="chat-input" id="chatInput" placeholder="Type your response..." rows="1"></textarea>
+      <button class="send-button" id="sendButton" disabled>➤</button>
+    </div>
+  </div>
+
+  <!-- More options modal -->
+  <div class="more-modal-overlay" id="moreModalOverlay"></div>
+  <div class="more-modal" id="moreModal">
+    <div class="more-modal-header">Options</div>
+
+    <button class="more-option-btn" id="typeResponseBtn">
+      <span class="icon">💬</span>
+      <span class="label">Type Response</span>
+    </button>
+
+    <button class="more-option-btn" id="skipQuestionBtn">
+      <span class="icon">⏭️</span>
+      <span class="label">Skip Question</span>
+    </button>
+
+    <button class="more-option-btn" id="settingsBtn">
+      <span class="icon">⚙️</span>
+      <span class="label">Settings</span>
+    </button>
+
+    <button class="more-cancel-btn" id="cancelMoreBtn">
+      Cancel
+    </button>
+  </div>
+
+  <script src="../js/interview.js"></script>
+  <script>
+    // Initialize interview client
+    const interviewClient = new window.InterviewClient();
+    let isRecording = false;
+    let startTime = null;
+    let timerInterval = null;
+    let elapsedTime = 0; // Track total elapsed time in seconds
+    let isPaused = false;
+
+    // Get interview mode from URL or default
+    const urlParams = new URLSearchParams(window.location.search);
+    const interviewMode = urlParams.get('mode') || 'Life Period';
+
+    // Check interview method (audio, text, photos, videos, etc.)
+    const interviewMethod = sessionStorage.getItem('interviewMethod') || 'audio';
+    const isAudioMode = interviewMethod === 'audio';
+
+    // Show appropriate interface based on method
+    if (isAudioMode) {
+      document.getElementById('audioControls').style.display = 'flex';
+      document.getElementById('chatInputContainer').classList.remove('show');
+    } else {
+      document.getElementById('audioControls').style.display = 'none';
+      document.getElementById('chatInputContainer').classList.add('show');
+    }
+
+    // Start interview when page loads
+    window.addEventListener('load', async function() {
+      // Initialize timer immediately (regardless of backend connection)
+      startTime = null;
+      document.querySelector('.timer').textContent = '00:00';
+
+      try {
+        // Clear default messages
+        document.querySelector('.chat-container').innerHTML = '';
+
+        // Start interview with Claude
+        await interviewClient.startInterview(interviewMode);
+
+        // If non-audio mode, show context message
+        if (!isAudioMode) {
+          showMethodContext();
+        }
+
+        console.log('✅ Interview ready! Claude is connected via AWS Bedrock.');
+      } catch (error) {
+        console.error('Failed to initialize interview:', error);
+        showConnectionError();
+      }
+    });
+
+    // Show context about the interview method
+    function showMethodContext() {
+      const methodMessages = {
+        'photos': '📸 I see you\'ve selected photos. I\'ll ask you questions about them.',
+        'videos': '🎥 I see you\'ve selected videos. I\'ll help you capture the stories behind them.',
+        'documents': '📄 I see you\'ve selected documents. Let\'s discuss what they mean to you.',
+        'scans': '📸 I see you\'ve selected scans. Let\'s explore the memories they contain.',
+        'text': '📝 I see you\'ve added notes. Let\'s expand on your story together.'
+      };
+
+      const message = methodMessages[interviewMethod] || '💬 Let\'s have a conversation about your story.';
+
+      // Add system message
+      const chatContainer = document.querySelector('.chat-container');
+      const systemMsg = document.createElement('div');
+      systemMsg.style.cssText = 'text-align: center; padding: 1rem; color: var(--color-text-gray); font-size: 0.9rem;';
+      systemMsg.textContent = message;
+      chatContainer.insertBefore(systemMsg, chatContainer.firstChild);
+    }
+
+    // Record button handler
+    const recordButton = document.getElementById('recordButton');
+    recordButton.addEventListener('click', async function() {
+      isRecording = await interviewClient.toggleRecording();
+
+      if (isRecording) {
+        // Start or resume timer
+        if (!startTime) {
+          // First time starting - initialize timer
+          startTime = Date.now() - (elapsedTime * 1000);
+          timerInterval = setInterval(updateTimer, 1000);
+        } else if (isPaused) {
+          // Resuming from pause - adjust startTime to account for elapsed time
+          startTime = Date.now() - (elapsedTime * 1000);
+          timerInterval = setInterval(updateTimer, 1000);
+          isPaused = false;
+        }
+
+        this.textContent = '🎤';
+        this.style.background = '#EF4444'; // Red when recording
+        document.querySelector('.record-hint').textContent = 'Recording... tap to pause';
+      } else {
+        // Paused - stop timer but keep elapsed time
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+          isPaused = true;
+        }
+
+        this.textContent = '▶️';
+        this.style.background = 'var(--color-navy)';
+        document.querySelector('.record-hint').textContent = 'Paused - tap to continue';
+      }
+    });
+
+    // Captions button handler
+    document.getElementById('captionsBtn').addEventListener('click', function() {
+      const enabled = interviewClient.toggleCaptions();
+      if (enabled) {
+        this.style.background = 'rgba(124, 58, 237, 0.1)';
+        this.style.color = '#7C3AED';
+      } else {
+        this.style.background = 'none';
+        this.style.color = 'var(--color-text-gray)';
+      }
+    });
+
+    // More button handler - show options modal
+    document.getElementById('moreBtn').addEventListener('click', function() {
+      showMoreModal();
+    });
+
+    function showMoreModal() {
+      document.getElementById('moreModal').classList.add('show');
+      document.getElementById('moreModalOverlay').classList.add('show');
+    }
+
+    function hideMoreModal() {
+      document.getElementById('moreModal').classList.remove('show');
+      document.getElementById('moreModalOverlay').classList.remove('show');
+    }
+
+    // Modal overlay click - close modal
+    document.getElementById('moreModalOverlay').addEventListener('click', hideMoreModal);
+
+    // Cancel button
+    document.getElementById('cancelMoreBtn').addEventListener('click', hideMoreModal);
+
+    // Type Response button
+    document.getElementById('typeResponseBtn').addEventListener('click', function() {
+      hideMoreModal();
+      showManualInput();
+    });
+
+    // Skip Question button
+    document.getElementById('skipQuestionBtn').addEventListener('click', function() {
+      hideMoreModal();
+      interviewClient.addUserMessage('[Skipped]');
+      interviewClient.sendResponse('I would prefer to skip this question and move to the next one.');
+    });
+
+    // Settings button
+    document.getElementById('settingsBtn').addEventListener('click', function() {
+      hideMoreModal();
+      alert('Settings:\n- Language: English\n- Speech Recognition: Enabled\n- Auto-save: On');
+    });
+
+    function showManualInput() {
+      const input = prompt('Type your response:');
+      if (input && input.trim()) {
+        interviewClient.addUserMessage(input.trim());
+        interviewClient.sendResponse(input.trim());
+      }
+    }
+
+    // End button handler
+    document.querySelector('.end-button').addEventListener('click', async function() {
+      if (!confirm('Are you sure you want to end this interview?')) {
+        return;
+      }
+
+      try {
+        // Stop recording and cleanup
+        interviewClient.cleanup();
+
+        const result = await interviewClient.endInterview();
+
+        // Clear timer
+        if (timerInterval) {
+          clearInterval(timerInterval);
+        }
+
+        // Store story in sessionStorage for chapter preview
+        sessionStorage.setItem('interviewStory', result.story);
+        sessionStorage.setItem('interviewTranscript', JSON.stringify(result.transcript));
+
+        // Redirect to chapter preview
+        window.location.href = 'chapter-preview.html';
+      } catch (error) {
+        alert('Failed to end interview. Please try again.');
+      }
+    });
+
+    // Update timer
+    function updateTimer() {
+      if (!startTime) return;
+
+      elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+      const minutes = Math.floor(elapsedTime / 60);
+      const seconds = elapsedTime % 60;
+      const timerEl = document.querySelector('.timer');
+      if (timerEl) {
+        timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+    }
+
+    // Chat input handlers (for non-audio modes)
+    const chatInput = document.getElementById('chatInput');
+    const sendButton = document.getElementById('sendButton');
+
+    // Auto-resize textarea
+    chatInput.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+
+      // Enable/disable send button
+      sendButton.disabled = !this.value.trim();
+    });
+
+    // Send on Enter (Shift+Enter for new line)
+    chatInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (this.value.trim()) {
+          sendChatMessage();
+        }
+      }
+    });
+
+    // Send button click
+    sendButton.addEventListener('click', sendChatMessage);
+
+    function sendChatMessage() {
+      const message = chatInput.value.trim();
+      if (!message) return;
+
+      // Start timer on first message if not started
+      if (!startTime) {
+        startTime = Date.now() - (elapsedTime * 1000);
+        timerInterval = setInterval(updateTimer, 1000);
+      }
+
+      // Send message
+      interviewClient.addUserMessage(message);
+      interviewClient.sendResponse(message);
+
+      // Clear input
+      chatInput.value = '';
+      chatInput.style.height = 'auto';
+      sendButton.disabled = true;
+      chatInput.focus();
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+      interviewClient.cleanup();
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    });
+
+    // Show connection error
+    function showConnectionError() {
+      const chatContainer = document.querySelector('.chat-container');
+      chatContainer.innerHTML = `
+        <div class="message error" style="text-align: center; padding: 2rem;">
+          <h3 style="color: #EF4444; margin-bottom: 1rem;">⚠️ Connection Error</h3>
+          <p style="color: var(--color-text-gray); margin-bottom: 1rem;">
+            Unable to connect to the interview API server.
+          </p>
+          <p style="color: var(--color-text-gray); font-size: 0.9rem;">
+            Please make sure:
+          </p>
+          <ul style="text-align: left; max-width: 400px; margin: 1rem auto; color: var(--color-text-gray);">
+            <li>The backend server is running (npm start in /server directory)</li>
+            <li>AWS credentials are configured in config.json</li>
+            <li>You have access to AWS Bedrock with Anthropic Claude</li>
+          </ul>
+          <button onclick="window.location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
+            Retry Connection
+          </button>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
