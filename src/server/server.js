@@ -56,6 +56,9 @@ app.use(cors(config.server.cors));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Serve static files (HTML, CSS, JS, images)
+app.use(express.static(path.join(__dirname, '../..')));
+
 // Initialize AWS Bedrock client with appropriate credentials
 let bedrockClient;
 
