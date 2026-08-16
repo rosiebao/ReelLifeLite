@@ -31,7 +31,7 @@ if (fs.existsSync(configPath)) {
       region: process.env.AWS_REGION || 'us-east-1',
     },
     anthropic: {
-      modelId: process.env.ANTHROPIC_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      modelId: process.env.ANTHROPIC_MODEL_ID || 'us.anthropic.claude-sonnet-5',
       maxTokens: parseInt(process.env.MAX_TOKENS) || 2048,
       temperature: parseFloat(process.env.TEMPERATURE) || 0.7,
       topP: parseFloat(process.env.TOP_P) || 0.9,
