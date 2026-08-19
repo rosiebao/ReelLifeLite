@@ -2,7 +2,9 @@
 // Connects to backend API with AWS Bedrock (Anthropic Claude)
 
 // Auto-detect API URL: use current origin in production, localhost in development
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = window.location.protocol === 'file:'
+? 'http://localhost:3000/api'
+: '/api';
 
 class InterviewClient {
   constructor() {
