@@ -216,6 +216,9 @@ app.post('/api/interview/respond', async (req, res) => {
     }
 
     const session = interviewSessions.get(sessionId);
+    if (typeof response !== 'string' || !response.trim()) {
+      return res.status(400).json({ success: false, error: 'response must be a non-empty string' });
+    }
 
     // Add user response to history
     session.conversationHistory.push({
@@ -310,8 +313,9 @@ async function generateQuestion(sessionId, userResponse) {
   const requestBody = {
     anthropic_version: 'bedrock-2023-05-31',
     max_tokens: config.anthropic.maxTokens,
-    temperature: config.anthropic.temperature,
-    top_p: config.anthropic.topP,
+    thinking: { type: 'disabled' },
+    // temperature: config.anthropic.temperature,
+    // top_p: config.anthropic.topP,
     system: session.systemPrompt,
     messages: messages,
   };
@@ -325,8 +329,11 @@ async function generateQuestion(sessionId, userResponse) {
 
   const response = await bedrockClient.send(command);
   const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-  const question = responseBody.content[0].text;
+  const textBlock = responseBody.content.find(b => b.type === 'text');
+  if (!textBlock?.text) {
+    throw new Error(`No text block in response (stop_reason=${responseBody.stop_reason}, blocks=${responseBody.content.map(b => b.type).join(',')})`);
+  }
+  const question = textBlock.text;
 
   // Store assistant's question in history
   session.conversationHistory.push({
@@ -355,7 +362,8 @@ async function generateStory(session) {
   const requestBody = {
     anthropic_version: 'bedrock-2023-05-31',
     max_tokens: 4096,
-    temperature: 0.7,
+    thinking: { type: 'disabled' },
+    // temperature: 0.7,
     system: 'You are a skilled memoir writer who transforms interview transcripts into beautiful, flowing first-person narratives. You preserve the authentic voice and emotions while crafting a compelling story.',
     messages: messages,
   };
