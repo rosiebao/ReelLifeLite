@@ -357,7 +357,7 @@
       <button class="back-button" onclick="window.history.back()">‹</button>
       <div class="interview-title">Interview in Progress</div>
       <div class="timer">05:32</div>
-      <button class="end-button" onclick="window.location.href='chapter-preview.html'">End</button>
+      <button class="end-button" ="window.location.href='chapter-preview.html'">End</button>
     </div>
 
     <div class="chat-container">
@@ -642,6 +642,10 @@
 
         // Store story in sessionStorage for chapter preview
         sessionStorage.setItem('interviewStory', result.story);
+        sessionStorage.setItem('interviewTitle', result.title || '');
+        sessionStorage.setItem('interviewLocation', result.location || '');
+        sessionStorage.setItem('interviewPeriod', result.period || '');
+        sessionStorage.setItem('interviewRecordedAt', result.recordedAt || '');
         sessionStorage.setItem('interviewTranscript', JSON.stringify(result.transcript));
 
         // Redirect to chapter preview

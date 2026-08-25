@@ -259,15 +259,23 @@ app.post('/api/interview/end', async (req, res) => {
 
     const session = interviewSessions.get(sessionId);
 
-    // Generate story from conversation
     const story = await generateStory(session);
+      const meta = await generateMetadata(story).catch(err => {
+        console.error('Metadata generation failed:', err);
+        return { title: null, location: null, period: null };
+      });
 
-    res.json({
-      success: true,
-      transcript: session.conversationHistory,
-      story,
-      duration: calculateDuration(session),
-    });
+      res.json({
+        success: true,
+        title: meta.title || `${session.mode} Chapter`,
+        location: meta.location,
+        period: meta.period,
+        recordedAt: session.created,
+        transcript: session.conversationHistory,
+        story,
+        duration: calculateDuration(session),
+      });
+
 
     // Clean up session
     interviewSessions.delete(sessionId);
@@ -364,7 +372,7 @@ async function generateStory(session) {
     max_tokens: 4096,
     thinking: { type: 'disabled' },
     // temperature: 0.7,
-    system: 'You are a skilled memoir writer who transforms interview transcripts into beautiful, flowing first-person narratives. You preserve the authentic voice and emotions while crafting a compelling story.',
+    system: 'You are a skilled memoir writer who transforms interview transcripts into beautiful, flowing first-person narratives. You preserve the authentic voice and emotions while crafting a compelling story. Do not include a title or any markdown headings — begin directly with the prose.',
     messages: messages,
   };
 
@@ -380,6 +388,45 @@ async function generateStory(session) {
 
   return responseBody.content[0].text;
 }
+
+ // Extract chapter metadata from the finished story
+  async function generateMetadata(story) {
+    const requestBody = {
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: 200,
+      thinking: { type: 'disabled' },
+      system: `You extract metadata from memoir chapters. Reply with a single JSON object and nothing else — no markdown fences, no commentary.
+
+  Schema: {"title": string, "location": string|null, "period": string|null}
+
+  - title: an evocative chapter title, 3-8 words, no quotation marks or trailing punctuation.
+  - location: where the events happen, named as the storyteller would (e.g. "Seattle", "rural Ohio"). null if never stated.
+  - period: when the events happen (e.g. "March 1998", "the summer of 1985"). null if never stated.
+
+  Never guess or invent location or period. If the storyteller did not say, use null.`,
+      messages: [{ role: 'user', content: `Memoir chapter:\n\n${story}` }],
+    };
+
+    const command = new InvokeModelCommand({
+      modelId: config.anthropic.modelId,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify(requestBody),
+    });
+
+    const response = await bedrockClient.send(command);
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    const raw = responseBody.content.find(b => b.type === 'text')?.text?.trim() ?? '';
+
+    try {
+      const parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+      const str = v => (typeof v === 'string' && v.trim() ? v.trim() : null);
+      return { title: str(parsed.title), location: str(parsed.location), period: str(parsed.period) };
+    } catch {
+      console.error('Could not parse metadata JSON:', raw);
+      return { title: null, location: null, period: null };
+    }
+  }
 
 // Calculate interview duration
 function calculateDuration(session) {

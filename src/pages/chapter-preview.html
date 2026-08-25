@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Preview your chapter">
+  <title>Chapter Preview - ReelLife</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .preview-page {
+      background: var(--color-light-bg);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+
+    .back-button {
+      color: var(--color-navy);
+      font-size: 1.5rem;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+
+    .save-badge {
+      font-size: 0.85rem;
+      color: var(--color-text-gray);
+    }
+
+    .preview-card {
+      background: var(--color-white);
+      border-radius: var(--radius-lg);
+      padding: 2rem 1.5rem;
+      box-shadow: var(--shadow-md);
+      margin-bottom: 1.5rem;
+    }
+
+    .preview-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .chapter-image {
+      width: 100%;
+      height: 240px;
+      object-fit: cover;
+      border-radius: var(--radius-md);
+      margin: 1.5rem 0;
+      background: linear-gradient(135deg, #A0B4C8 0%, #7A8FA5 100%);
+    }
+
+    .chapter-title {
+      font-size: 1.75rem;
+      font-family: var(--font-serif);
+      margin-bottom: 1rem;
+      color: var(--color-navy);
+    }
+
+    .chapter-meta {
+      font-size: 0.95rem;
+      color: var(--color-text-gray);
+      margin-bottom: 1.5rem;
+      font-weight: 500;
+    }
+
+    .chapter-content {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: var(--color-navy);
+      margin-bottom: 1.5rem;
+    }
+
+    .word-count {
+      font-size: 0.875rem;
+      color: var(--color-text-gray);
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .btn-outline-gold {
+      background: transparent;
+      border: 2px solid var(--color-gold);
+      color: var(--color-gold);
+    }
+
+    .btn-outline-gold:hover {
+      background: var(--color-gold);
+      color: var(--color-white);
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-page">
+    <div class="preview-header">
+      <button class="back-button" onclick="window.history.back()">‹</button>
+      <h1 class="preview-title">Chapter Preview</h1>
+      <span class="save-badge">Last saved just now</span>
+    </div>
+
+    <div class="preview-card">
+      <div class="chapter-image"></div>
+
+      <h2 class="chapter-title" id="chapter-title">Untitlted Chapter</h2>
+
+        <p class="chapter-meta" id="chapter-meta"></p>
+
+        <div class="chapter-content" id="chapter-content"></div>
+
+        <p class="word-count" id="word-count"></p>
+    </div>
+
+    <div class="action-buttons">
+      <button class="btn btn-outline-gold btn-full btn-large">
+        ✨ Edit with AI
+      </button>
+
+      <button class="btn btn-primary btn-full btn-large" onclick="window.location.href='select-chapters.html'">
+        Publish Chapter
+      </button>
+    </div>
+  </div>
+<script>
+    const story = sessionStorage.getItem('interviewStory') || '';
+    const title = sessionStorage.getItem('interviewTitle');
+    const location = sessionStorage.getItem('interviewLocation');
+    const period = sessionStorage.getItem('interviewPeriod');
+    const recordedAt = sessionStorage.getItem('interviewRecordedAt');
+
+    if (title) {
+      document.getElementById('chapter-title').textContent = title;
+      document.title = `${title} - ReelLife`;
+    }
+
+    // "Seattle • March 1998", dropping whichever half is unknown
+    const metaEl = document.getElementById('chapter-meta');
+    const parts = [location, period].filter(Boolean);
+    if (parts.length) {
+      metaEl.textContent = parts.join(' • ');
+    } else if (recordedAt) {
+      metaEl.textContent = 'Recorded ' + new Date(recordedAt).toLocaleDateString(undefined, {
+        year: 'numeric', month: 'long', day: 'numeric',
+      });
+      metaEl.remove();
+    }
+
+    const contentEl = document.getElementById('chapter-content');
+    const wordCountEl = document.getElementById('word-count');
+
+    if (story.trim()) {
+      // Drop the model's own leading "# Title" line — the h2 above already covers it
+      const body = story.trim().replace(/^#\s+.*(\n+|$)/, '');
+
+      contentEl.replaceChildren(...body.split(/\n\s*\n+/).filter(b => b.trim()).map(block => {
+        const heading = block.match(/^#{1,6}\s+(.*)$/);
+        const el = document.createElement(heading ? 'h3' : 'p');
+        el.textContent = heading ? heading[1] : block.replace(/\s*\n\s*/g, ' ');
+        return el;
+      }));
+
+      wordCountEl.textContent = `${body.trim().split(/\s+/).length.toLocaleString()} words`;
+    } else {
+      contentEl.textContent = 'No story was generated for this session.';
+      wordCountEl.remove();
+    }
+</script>
+</body>
+</html>
