@@ -260,7 +260,7 @@ app.post('/api/interview/end', async (req, res) => {
     const session = interviewSessions.get(sessionId);
 
     const story = await generateStory(session);
-      const meta = await generateMetadata(story).catch(err => {
+      const meta = await generateMetadata(story, session.created).catch(err => {
         console.error('Metadata generation failed:', err);
         return { title: null, location: null, period: null };
       });
@@ -363,16 +363,20 @@ async function generateStory(session) {
   const messages = [
     {
       role: 'user',
-      content: `Please transform the following interview transcript into a compelling first-person narrative story. Maintain the emotional tone, include vivid details, and organize it into coherent paragraphs. The story should read like a personal memoir chapter.\n\nTranscript:\n${transcript}\n\nPlease write the story now:`,
+      content: `Please transform the following interview transcript into a compelling first-person narrative story. Maintain the emotional tone, include the vivid details the storyteller gave, and organize it into coherent paragraphs. The story should read like a personal memoir chapter.\n\nTranscript:\n${transcript}\n\nPlease write the story now:`,
     },
   ];
+  const recordedLabel = new Date(session.created).toLocaleDateString('en-US', {
+  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
 
   const requestBody = {
     anthropic_version: 'bedrock-2023-05-31',
     max_tokens: 4096,
     thinking: { type: 'disabled' },
     // temperature: 0.7,
-    system: 'You are a skilled memoir writer who transforms interview transcripts into beautiful, flowing first-person narratives. You preserve the authentic voice and emotions while crafting a compelling story. Do not include a title or any markdown headings — begin directly with the prose.',
+    system: `You are a skilled memoir writer who transforms interview transcripts into beautiful, flowing first-person narratives. You preserve the authentic voice and emotions while crafting a compelling story. Do not include a title or any markdown headings — begin directly with the prose. This interview was recorded on ${recordedLabel}. Use that date only to resolve relative time references the storyteller makes ("yesterday", "last summer", "three years ago"). 
+    Never invent a date, weekday, month, year, place name, or person's name that the storyteller did not state and that cannot be derived from the recording date. If the storyteller was vague, stay vague — write "the day before" rather than naming a weekday.`,
     messages: messages,
   };
 
@@ -390,7 +394,10 @@ async function generateStory(session) {
 }
 
  // Extract chapter metadata from the finished story
-  async function generateMetadata(story) {
+  async function generateMetadata(story, recordedAt) {
+    const recordedLabel = new Date(recordedAt).toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
     const requestBody = {
       anthropic_version: 'bedrock-2023-05-31',
       max_tokens: 200,
@@ -402,6 +409,9 @@ async function generateStory(session) {
   - title: an evocative chapter title, 3-8 words, no quotation marks or trailing punctuation.
   - location: where the events happen, named as the storyteller would (e.g. "Seattle", "rural Ohio"). null if never stated.
   - period: when the events happen (e.g. "March 1998", "the summer of 1985"). null if never stated.
+  - The chapter was recorded on ${recordedLabel}. Resolve relative references
+    ("yesterday", "last month") against that date. Still use null if the
+    storyteller gave no time reference at all.
 
   Never guess or invent location or period. If the storyteller did not say, use null.`,
       messages: [{ role: 'user', content: `Memoir chapter:\n\n${story}` }],

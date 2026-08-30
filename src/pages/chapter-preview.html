@@ -111,7 +111,7 @@
     <div class="preview-card">
       <div class="chapter-image"></div>
 
-      <h2 class="chapter-title" id="chapter-title">Untitlted Chapter</h2>
+      <h2 class="chapter-title" id="chapter-title">Untitled Chapter</h2>
 
         <p class="chapter-meta" id="chapter-meta"></p>
 
@@ -133,7 +133,7 @@
 <script>
     const story = sessionStorage.getItem('interviewStory') || '';
     const title = sessionStorage.getItem('interviewTitle');
-    const location = sessionStorage.getItem('interviewLocation');
+    const place = sessionStorage.getItem('interviewLocation');
     const period = sessionStorage.getItem('interviewPeriod');
     const recordedAt = sessionStorage.getItem('interviewRecordedAt');
 
@@ -144,13 +144,13 @@
 
     // "Seattle • March 1998", dropping whichever half is unknown
     const metaEl = document.getElementById('chapter-meta');
-    const parts = [location, period].filter(Boolean);
+    const parts = [place, period].filter(Boolean);
     if (parts.length) {
       metaEl.textContent = parts.join(' • ');
     } else if (recordedAt) {
       metaEl.textContent = 'Recorded ' + new Date(recordedAt).toLocaleDateString(undefined, {
         year: 'numeric', month: 'long', day: 'numeric',
-      });
+      }); 
       metaEl.remove();
     }
 
