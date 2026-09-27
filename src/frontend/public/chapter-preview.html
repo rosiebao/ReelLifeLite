@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Preview your chapter">
   <title>Chapter Preview - ReelLife</title>
-  <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="style.css">
   <style>
     .preview-page {
       background: var(--color-light-bg);
@@ -102,13 +102,13 @@
 <body>
   <div class="preview-page">
     <div class="preview-header">
-      <button class="back-button" onclick="window.history.back()">‹</button>
+      <button class="back-button" id="backButton">‹</button>
       <h1 class="preview-title">Chapter Preview</h1>
       <span class="save-badge">Last saved just now</span>
     </div>
 
     <div class="preview-card">
-      <img class="chapter-image" src="../images/happy_nostalgia_light.JPG" alt="Chapter cover">
+      <img class="chapter-image" src="guangzhou.jpg" alt="Chapter cover">
 
       <h2 class="chapter-title" id="chapter-title">Untitled Chapter</h2>
 
@@ -124,7 +124,7 @@
          Edit with AI
       </button>
 
-      <button class="btn btn-primary btn-full btn-large" onclick="window.location.href='select-chapters.html'">
+      <button class="btn btn-primary btn-full btn-large" onclick="publishChapter()">
         Publish Chapter
       </button>
     </div>
@@ -172,6 +172,41 @@
       contentEl.textContent = 'No story was generated for this session.';
       wordCountEl.remove();
     }
+
+    // Publishing happens in the Story tab's publish dialog, which is also where
+    // this interview's conversation and its saved chapter live -- so send the
+    // author back there with that conversation already selected. Inside that tab
+    // this page runs in a frame (see openInterviewPanel() in testChat.js), where
+    // navigating would nest the whole app inside the pane, so ask the host page
+    // to show the conversation instead.
+    const embedded = window.parent !== window;
+
+    function interviewConversationId() {
+      const id = Number(sessionStorage.getItem('interviewConversationId'));
+      return Number.isInteger(id) && id > 0 ? id : null;
+    }
+
+    function publishChapter() {
+      if (embedded) {
+        window.parent.postMessage(
+          { type: 'reellife:show-conversation', conversationId: interviewConversationId() },
+          window.location.origin
+        );
+        return;
+      }
+      const conversationId = interviewConversationId();
+      window.location.href = conversationId ? `index.html?conversation=${conversationId}` : 'index.html';
+    }
+
+    // Framed, "back" means "back to my conversation": the interview that was in
+    // the pane has already been ended and saved.
+    document.getElementById('backButton').addEventListener('click', () => {
+      if (embedded) {
+        publishChapter();
+      } else {
+        window.history.back();
+      }
+    });
 </script>
 </body>
 </html>

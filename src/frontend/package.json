@@ -1,0 +1,29 @@
+{
+  "name": "2026-app-challenge",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexCao-html/2026-app-challenge.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AlexCao-html/2026-app-challenge/issues"
+  },
+  "homepage": "https://github.com/AlexCao-html/2026-app-challenge#readme",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1"
+  }
+}

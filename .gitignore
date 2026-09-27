@@ -3,3 +3,11 @@ config.json
 .env
 *.log
 .DS_Store
+
+# Interview/conversation transcripts and media written at runtime
+# (see src/frontend/storage.js) -- personal recordings, never committed.
+src/frontend/conversation_files/
+
+# SQLite database (accounts, password hashes, session tokens, conversations).
+# Created automatically by src/frontend/db.js on first run.
+src/frontend/app.db

@@ -6,6 +6,15 @@ import { fromEnv, fromIni } from '@aws-sdk/credential-providers';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
+const { router: authRouter } = require('../frontend/auth');
+const { router: conversationsRouter } = require('../frontend/conversations');
+const { router: familyRouter } = require('../frontend/family');
+const { router: friendsRouter } = require('../frontend/friends');
+const { router: storiesRouter } = require('../frontend/stories');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,8 +63,31 @@ app.use(cors(config.server.cors));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Serve static files (HTML, CSS, JS, images)
-app.use(express.static(path.join(__dirname, '../..')));
+// Mount the app's real authenticated API routes that were previously living in
+// src/frontend. This keeps the frontend and backend in sync while serving the
+// app from the actual server entry point.
+app.use(authRouter);
+app.use(conversationsRouter);
+app.use(familyRouter);
+app.use(friendsRouter);
+app.use(storiesRouter);
+
+// Serve the frontend assets from the actual app directories. The app pages now
+// live in ../frontend/public (see src/frontend/README.md) -- ../frontend/pages
+// no longer holds any of them, so it must not be the starting page.
+app.use('/public', express.static(path.join(__dirname, '../frontend/public')));
+app.use('/pages', express.static(path.join(__dirname, '../frontend/pages')));
+app.use('/images', express.static(path.join(__dirname, '../frontend/images')));
+// The interview page (public/interview.html) loads its client from
+// ../js/interview.js, which resolves to /js/... -- so this directory has to be
+// mounted too or the page comes up with no InterviewClient at all.
+app.use('/js', express.static(path.join(__dirname, '../frontend/js')));
+
+// Starting page: /public/index.html is the profile/home page, which itself
+// bounces signed-out visitors to /public/login.html (see public/profile.js).
+// Redirect instead of serving it at "/" so the page's relative links
+// (style.css, profile.jpg, login.html, ...) keep resolving inside /public.
+app.get('/', (_req, res) => res.redirect('/public/index.html'));
 
 // Initialize AWS Bedrock client with appropriate credentials
 let bedrockClient;
@@ -134,6 +166,19 @@ try {
 // Store active interview sessions (in production, use a database)
 const interviewSessions = new Map();
 
+// The interviewer's system prompt per interview mode. Shared by /start and
+// /resume, so a resumed interview keeps the voice it started with.
+const INTERVIEW_SYSTEM_PROMPTS = {
+  'Life Period': 'You are a compassionate interviewer helping someone document memories from a specific period of their life. Ask thoughtful, open-ended questions that encourage detailed storytelling. Focus on emotions, sensory details, and significant moments. Keep questions concise and conversational.',
+  'Major Event': 'You are conducting an oral history interview about a major life event. Ask questions that help the person explore the before, during, and after of this event, including how it changed them. Be empathetic and allow them to share at their own pace.',
+  'Journey': 'You are interviewing someone about a meaningful journey or experience. Ask about their motivations, challenges faced, people encountered, and what they learned along the way. Encourage vivid storytelling with sensory details.',
+  'Relationship': 'You are helping someone preserve memories of an important relationship. Ask about how they met, memorable moments together, what they learned from this person, and the lasting impact. Be warm and encourage emotional honesty.',
+  'Wisdom': 'You are conducting a legacy interview focused on life lessons and wisdom. Ask about key learnings, advice for future generations, values that guided them, and what they hope others will remember. Help them articulate their insights clearly.',
+};
+
+// Upper bound on the saved exchange a resume can replay into a session.
+const MAX_RESUME_HISTORY = 400;
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
@@ -162,16 +207,7 @@ app.post('/api/interview/start', async (req, res) => {
 
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create system prompt based on interview mode
-    const systemPrompts = {
-      'Life Period': 'You are a compassionate interviewer helping someone document memories from a specific period of their life. Ask thoughtful, open-ended questions that encourage detailed storytelling. Focus on emotions, sensory details, and significant moments. Keep questions concise and conversational.',
-      'Major Event': 'You are conducting an oral history interview about a major life event. Ask questions that help the person explore the before, during, and after of this event, including how it changed them. Be empathetic and allow them to share at their own pace.',
-      'Journey': 'You are interviewing someone about a meaningful journey or experience. Ask about their motivations, challenges faced, people encountered, and what they learned along the way. Encourage vivid storytelling with sensory details.',
-      'Relationship': 'You are helping someone preserve memories of an important relationship. Ask about how they met, memorable moments together, what they learned from this person, and the lasting impact. Be warm and encourage emotional honesty.',
-      'Wisdom': 'You are conducting a legacy interview focused on life lessons and wisdom. Ask about key learnings, advice for future generations, values that guided them, and what they hope others will remember. Help them articulate their insights clearly.',
-    };
-
-    const systemPrompt = systemPrompts[mode] || systemPrompts['Life Period'];
+    const systemPrompt = INTERVIEW_SYSTEM_PROMPTS[mode] || INTERVIEW_SYSTEM_PROMPTS['Life Period'];
 
     // Initialize session
     const session = {
@@ -198,6 +234,59 @@ app.post('/api/interview/start', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to start interview',
+      message: error.message,
+    });
+  }
+});
+
+// Resume a recorded interview: a new session seeded with the saved exchange
+// (the Story tab keeps every question and answer -- see
+// public/interviewStorage.js), so the next question follows on from what was
+// already said instead of starting the story over.
+app.post('/api/interview/resume', async (req, res) => {
+  try {
+    const { mode, history } = req.body;
+
+    if (!Array.isArray(history) || history.length === 0) {
+      return res.status(400).json({ success: false, error: 'history must be a non-empty array' });
+    }
+    if (history.length > MAX_RESUME_HISTORY) {
+      return res.status(400).json({ success: false, error: `history is limited to ${MAX_RESUME_HISTORY} entries` });
+    }
+    const conversationHistory = [];
+    for (const entry of history) {
+      if (!entry || !['assistant', 'user'].includes(entry.role)
+          || typeof entry.content !== 'string' || !entry.content.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'each history entry needs a role (assistant or user) and non-empty content',
+        });
+      }
+      conversationHistory.push({ role: entry.role, content: entry.content, timestamp: new Date().toISOString() });
+    }
+
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const session = {
+      id: sessionId,
+      mode,
+      systemPrompt: INTERVIEW_SYSTEM_PROMPTS[mode] || INTERVIEW_SYSTEM_PROMPTS['Life Period'],
+      conversationHistory,
+      created: new Date().toISOString(),
+    };
+    interviewSessions.set(sessionId, session);
+
+    const question = await generateQuestion(
+      sessionId,
+      null,
+      "We're picking this interview back up after a break. Welcome me back in one short sentence, then ask the next question -- build on what I've already told you and don't repeat anything you've already asked."
+    );
+
+    res.json({ success: true, sessionId, question });
+  } catch (error) {
+    console.error('Error resuming interview:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to resume interview',
       message: error.message,
     });
   }
@@ -289,8 +378,9 @@ app.post('/api/interview/end', async (req, res) => {
   }
 });
 
-// Generate question using Claude
-async function generateQuestion(sessionId, userResponse) {
+// Generate question using Claude. `instruction` overrides the usual "what next"
+// nudge -- /resume uses it to have the interviewer pick the thread back up.
+async function generateQuestion(sessionId, userResponse, instruction = null) {
   const session = interviewSessions.get(sessionId);
 
   // Build conversation for Claude
@@ -305,7 +395,9 @@ async function generateQuestion(sessionId, userResponse) {
   });
 
   // Add instruction for next question
-  if (session.conversationHistory.length === 0) {
+  if (instruction) {
+    messages.push({ role: 'user', content: instruction });
+  } else if (session.conversationHistory.length === 0) {
     messages.push({
       role: 'user',
       content: 'Please ask me the first question to begin my story.',

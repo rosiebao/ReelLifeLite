@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+        <title>ReelLife</title>
+        <link rel="stylesheet" href="loginStyle.css" />
+    </head>
+    <body>
+        <div class="background"></div>
+        <h1>ReelLife</h1>
+        <div class="loginBox">
+            <div class="toSignIn">
+                <h2>Don't Have an Account?</h2>
+                <p>Sign up here to join the ReelLife Community</p>
+                <a href="javascript:;" id="toggleMode">SIGN UP</a>
+            </div>
+            <div class="login">
+                <h2 id="formTitle">Login</h2>
+                <div>
+                    <p id="usernameField" class="hidden">Username: <input type="text" id="username"></p>
+                    <p>Email:<br /> <input type="text" id="email"></p>
+                    <p>Password:<br /> <input type="password" id="password" minlength="8"></p>
+                    <p id="passwordHint" class="hint hidden">At least 8 characters</p>
+                    <p id="errorMessage" class="error"></p>
+                    <div id="signInButton" role="button" tabindex="0">Sign In</div>
+                </div>
+            </div>
+        </div>
+    </body>
+    <script src="config.js"></script>
+    <script src="storage_api.js"></script>
+    <script src="loginScript.js"></script>
+</html>
