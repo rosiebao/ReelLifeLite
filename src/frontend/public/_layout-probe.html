@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Layout probe</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <!-- Temporary measurement page. It pulls the real Story tab markup out of
+             index.html and reports the heights of the pane chain, so the framed
+             interview can be checked against the sidebar in a real browser. -->
+        <div class="wrapper">
+            <main></main>
+        </div>
+        <pre id="measure">measuring…</pre>
+        <script>
+            (async function probe() {
+                const html = await (await fetch("index.html")).text();
+                const parsed = new DOMParser().parseFromString(html, "text/html");
+                document.querySelector("main").replaceWith(parsed.querySelector("main"));
+
+                const section = document.querySelector("#tellYourStorySection");
+                section.classList.add("active");
+                section.classList.remove("inactive", "none");
+
+                // Put the interview pane where the app would (markup comes from
+                // index.html already; this only opens it).
+                const panel = document.querySelector("#interviewPanel");
+                document.querySelector("#testEmptyState").classList.add("hidden");
+                document.querySelector("#testConversationPanel").classList.add("hidden");
+                panel.classList.remove("hidden");
+
+                const frame = document.querySelector("#interviewFrame");
+                frame.src = "interview.html?mode=Life%20Period";
+
+                const lines = [];
+                const round = (value) => Math.round(value);
+                const report = (label, node) => lines.push(`${label}=${round(node.getBoundingClientRect().height)}`);
+
+                await new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+                await new Promise((resolve) => setTimeout(resolve, 400));
+
+                lines.push(`viewport=${window.innerHeight}`);
+                report("section", section);
+                report("layout", document.querySelector(".testLayout"));
+                report("sidebar", document.querySelector(".testSidebar"));
+                report("testMain", document.querySelector(".testMain"));
+                report("panel", panel);
+                report("bar", document.querySelector("#interviewPanel .storyPublishBar"));
+                report("frame", frame);
+
+                const inner = frame.contentDocument;
+                if (inner) {
+                    lines.push(`inner_body=${round(inner.body.getBoundingClientRect().height)}`);
+                    lines.push(`inner_page=${round(inner.querySelector(".interview-page").getBoundingClientRect().height)}`);
+                    lines.push(`inner_chat=${round(inner.querySelector(".chat-container").getBoundingClientRect().height)}`);
+                    lines.push(`inner_title=${inner.title}`);
+                } else {
+                    lines.push("inner=unavailable");
+                }
+
+                document.getElementById("measure").textContent = "PROBE " + lines.join(" ");
+            })();
+        </script>
+    </body>
+</html>

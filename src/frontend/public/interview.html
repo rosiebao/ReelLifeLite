@@ -5,11 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="AI-guided interview">
   <title>Interview in Progress - ReelLife</title>
-  <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="style.css">
   <style>
     .interview-page {
       background: var(--color-white);
-      min-height: 100vh;
+      /* Exactly the frame's height (never taller): the page itself must not
+         scroll, only .chat-container does -- otherwise the bottom controls
+         drop below the left nav's bottom edge in index.html. */
+      height: 100vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
@@ -41,6 +45,16 @@
       color: var(--color-text-gray);
     }
 
+    /* Only says something when a save is failing or impossible. */
+    .storage-status {
+      font-size: 0.75rem;
+      color: var(--color-text-gray);
+      max-width: 30%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .end-button {
       color: #EF4444;
       font-weight: 600;
@@ -52,6 +66,9 @@
 
     .chat-container {
       flex: 1;
+      /* Allow this flex child to shrink below its content height, so long
+         transcripts scroll here instead of stretching the page past 100vh. */
+      min-height: 0;
       overflow-y: auto;
       padding: 1.5rem 1rem;
       display: flex;
@@ -354,10 +371,13 @@
 <body>
   <div class="interview-page">
     <div class="interview-header">
-      <button class="back-button" onclick="window.history.back()">‹</button>
+      <button class="back-button" id="backButton">‹</button>
       <div class="interview-title">Interview in Progress</div>
       <div class="timer">05:32</div>
-      <button class="end-button" ="window.location.href='chapter-preview.html'">End</button>
+      <!-- Whether the turns are reaching the Story tab's storage. Filled in by
+           interviewStorage.js; stays empty while everything is saving fine. -->
+      <span class="storage-status" id="storageStatus"></span>
+      <button class="end-button">End</button>
     </div>
 
     <div class="chat-container">
@@ -456,10 +476,31 @@
     </button>
   </div>
 
+  <!-- config.js (API_BASE_URL) and storage_api.js (storageApi) are the plain
+       globals interviewStorage.js saves through; it in turn writes every
+       exchange into the conversation the Story tab lists. -->
+  <script src="config.js"></script>
+  <script src="storage_api.js"></script>
+  <script src="interviewStorage.js"></script>
   <script src="../js/interview.js"></script>
   <script>
     // Initialize interview client
     const interviewClient = new window.InterviewClient();
+    // Every answer the storyteller gives is handed to interviewStorage.js, which
+    // saves the exchange into a conversation the Story tab can list and publish.
+    interviewClient.onTurn = (turn) => interviewStorage.rememberTurn(turn.question, turn.answer);
+
+    // Inside the Story tab this page runs in a frame (openInterviewPanel() in
+    // testChat.js). There, "back" means closing the pane -- history.back() would
+    // walk the frame's own short history and land back on the interview.
+    const embedded = window.parent !== window;
+    document.getElementById('backButton').addEventListener('click', () => {
+      if (embedded) {
+        window.parent.postMessage({ type: 'reellife:close-interview' }, window.location.origin);
+      } else {
+        window.history.back();
+      }
+    });
     let isRecording = false;
     let startTime = null;
     let timerInterval = null;
@@ -485,6 +526,19 @@
 
     // Start interview when page loads
     window.addEventListener('load', async function() {
+      // The interview now saves itself into the Story tab's conversation
+      // storage, so a session is required -- without one every save would 401.
+      // Same bounce-to-login as index.html (see profile.js), except in a frame,
+      // where navigating would only swap the pane's contents for the login page.
+      if (!storageApi.isLoggedIn()) {
+        if (embedded) {
+          window.parent.postMessage({ type: 'reellife:need-login' }, window.location.origin);
+          return;
+        }
+        window.location.href = 'login.html';
+        return;
+      }
+
       // Initialize timer immediately (regardless of backend connection)
       startTime = null;
       document.querySelector('.timer').textContent = '00:00';
@@ -493,8 +547,29 @@
         // Clear default messages
         document.querySelector('.chat-container').innerHTML = '';
 
-        // Start interview with Claude
-        await interviewClient.startInterview(interviewMode);
+        // ?resume=<conversation id> (from the Story tab) picks a recorded
+        // interview back up: its saved questions and answers are redrawn and
+        // replayed to Claude, and new turns keep saving into that same
+        // conversation. Anything that can't be resumed -- nothing saved yet, or
+        // it failed to load -- starts a fresh interview instead.
+        const resumeId = Number(urlParams.get('resume'));
+        const resumable = Number.isInteger(resumeId) && resumeId > 0
+          ? await interviewStorage.loadForResume(resumeId)
+          : null;
+
+        if (resumable && resumable.history.length > 0) {
+          await interviewClient.resumeInterview(interviewMode, resumable.history);
+          const number = resumable.conversation.interview_number;
+          document.querySelector('.interview-title').textContent =
+            number ? `Interview #${number}` : 'Interview in Progress';
+        } else {
+          // Start interview with Claude
+          await interviewClient.startInterview(interviewMode);
+        }
+
+        // Every interview session is logged (and listed in the Story tab) as
+        // soon as it is under way, not only once the first answer is saved.
+        await interviewStorage.beginSession();
 
         // If non-audio mode, show context message
         if (!isAudioMode) {
@@ -638,6 +713,20 @@
         // Clear timer
         if (timerInterval) {
           clearInterval(timerInterval);
+        }
+
+        // Keep the generated chapter as a private story on the conversation this
+        // interview was saving into, so it is still there when the author lands
+        // back on the Story tab (see interviewStorage.js). Best-effort: the
+        // chapter preview below works with or without it.
+        const chapter = await interviewStorage.saveChapter(result);
+        if (embedded) {
+          // Lets the pane's status bar say the chapter landed, since the frame is
+          // about to swap itself for the preview.
+          window.parent.postMessage(
+            { type: 'reellife:interview-finished', title: chapter?.title || result.title || '' },
+            window.location.origin
+          );
         }
 
         // Store story in sessionStorage for chapter preview

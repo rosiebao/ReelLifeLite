@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+        <title>ReelLife</title>
+        <link rel="stylesheet" href="style.css" />
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    </head>
+    <body>
+        <div class="background"></div>
+        <div class="wrapper">
+            <main>
+                <section id="selfSection" class="inactive s1">
+                    <div class="selfBackground">
+                        <h2 id="username">Me</h2>
+                        <h3 id="email">Email</h3>
+                    </div>
+                    <img src="profile.jpg" alt="profile" id="profilePicture" />
+                </section>
+                <section id="familySection" class="inactive s2">
+                    <img src="Family.svg" alt="Family" />
+                    <h3>Your Family Tree</h3>
+                    <div class="familyBackground"></div>
+                    <div class="treeContainer">
+                        <div class="familyTree">
+                            <div class="familyTreeRow R1">
+                                <div class="familyMember r1 c1">
+                                    <h3>Grandma (moms side)
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                                <div class="familyMember r1 c2">
+                                    <h3>Grandpa (moms side)
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                                <div class="familyMember r1 c3">
+                                    <h3>Grandma (dads side)
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                                <div class="familyMember r1 c4">
+                                    <h3>Grandpa (dads side)
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                            </div>
+                            <button class="familyTreeRowAddBtn AR1">
+                                Add
+                            </button>
+                            <div class="familyTreeRow R2">
+                                <div class="familyMember r2 c1">
+                                    <h3>Mom
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                                <div class="familyMember r2 c2">
+                                    <h3>Dad
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                            </div>
+                            <button class="familyTreeRowAddBtn AR2">
+                                Add
+                            </button>
+                            <div class="familyTreeRow R3">
+                                <div class="familyMember r3 c1" data-self>
+                                    <h3>Me
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                                <div class="familyMember r3 c2">
+                                    <h3>Sister
+                                        <img src="profile.jpg" alt="profile" />
+                                    </h3>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="resetTree">Reset Tree</button>
+                    </div>
+                </section>
+                <section id="tellYourStorySection" class="active s3">
+                    <h2>Tell Your Story</h2>
+                    <div class="testLayout">
+                        <aside class="testSidebar">
+                            <!-- The real Claude interview. It opens
+                                 interview.html in this tab's main pane (framed),
+                                 which saves the conversation through
+                                 storage_api.js and reports back with
+                                 postMessage (see interviewStorage.js /
+                                 testChat.js). -->
+                            <div class="newInterview">
+                                <h3>Chat with Your Story Companion</h3>
+                                <label>What is this story about?
+                                    <select id="interviewModeSelect">
+                                        <option value="Life Period">Life Period</option>
+                                        <option value="Major Event">Major Event</option>
+                                        <option value="Journey">Journey</option>
+                                        <option value="Relationship">Relationship</option>
+                                        <option value="Wisdom">Wisdom</option>
+                                    </select>
+                                </label>
+                                <label>How do you want to answer?
+                                    <select id="interviewMethodSelect">
+                                        <option value="audio">Speak (microphone)</option>
+                                        <option value="text">Type</option>
+                                    </select>
+                                </label>
+                                <button id="startInterviewBtn">🎙️ Start interview</button>
+                            </div>
+                            <!-- Hidden: conversations now come from interviews
+                                 (each one records its own). Kept in the markup
+                                 so testChat.js's handler still has its element. -->
+                            <button id="newTestConversationBtn" class="hidden">+ New conversation</button>
+                            <ul id="testConversationList" class="testConversationList"></ul>
+                        </aside>
+                        <div class="testMain">
+                            <div id="testEmptyState" class="testEmptyState">
+                                Select a conversation, or start an interview.
+                            </div>
+                            <div id="testConversationPanel" class="testConversationPanel hidden">
+                                <div class="storyPublishBar">
+                                    <span id="storyPublishStatus" class="storyPublishStatus">Not published</span>
+                                    <!-- Shown for recorded interviews only (testChat.js):
+                                         reopens the interview where it stopped. -->
+                                    <button type="button" id="resumeInterviewBtn" class="hidden">🎙️ Resume interview</button>
+                                    <button type="button" id="publishStoryBtn">Publish story</button>
+                                </div>
+                                <div id="testMessageList" class="message-list"></div>
+                                <form id="testMessageForm" class="message-form">
+                                    <textarea id="testMessageInput" placeholder="Say something..." required></textarea>
+                                    <button type="submit">Send</button>
+                                </form>
+                            </div>
+                            <!-- The real interview, in the pane exactly like the
+                                 conversation view above it: the interview page
+                                 itself, framed, so there is still only one
+                                 implementation of it (see interview.html). No
+                                 bar above it -- the interview page brings its
+                                 own header, and without one the frame fills the
+                                 whole pane (see style.css). -->
+                            <div id="interviewPanel" class="interviewPanel hidden">
+                                <iframe id="interviewFrame" class="interviewFrame" title="Chat with Your Story Companion"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section id="friendsSection" class="inactive s4">
+                    <h2>Friends</h2>
+                    <div class="peoplePanel">
+                        <form id="friendSearchForm" class="friendSearchForm">
+                            <input id="friendSearchInput" type="search" placeholder="Find people by username" />
+                            <button type="submit">Search</button>
+                        </form>
+                        <ul id="friendSearchResults" class="peopleList"></ul>
+                        <p id="friendSearchEmpty" class="peopleEmpty hidden">No one by that name.</p>
+                        <details id="friendRequestsBlock">
+                            <summary>Friend requests <span id="friendRequestCount" class="countBadge">0</span></summary>
+                            <h4>Received</h4>
+                            <ul id="incomingRequests" class="peopleList"></ul>
+                            <p id="incomingRequestsEmpty" class="peopleEmpty">Nothing waiting on you.</p>
+                            <h4>Sent</h4>
+                            <ul id="outgoingRequests" class="peopleList"></ul>
+                            <p id="outgoingRequestsEmpty" class="peopleEmpty">You haven't asked anyone yet.</p>
+                        </details>
+                        <details id="friendListBlock">
+                            <summary>Your friends <span id="friendCount" class="countBadge">0</span></summary>
+                            <ul id="friendList" class="peopleList"></ul>
+                            <p id="friendListEmpty" class="peopleEmpty">No friends yet -- search for someone above.</p>
+                        </details>
+                    </div>
+                    <h3>Stories from your friends</h3>
+                    <div class="friendsWrapper" id="friendStories"></div>
+                    <p id="friendStoriesEmpty" class="feedEmpty">
+                        Nothing here yet. Add some friends, and their stories shared with friends will show up here.
+                    </p>
+                </section>
+                <section id="communitySection" class="inactive s5">
+                    <h2>Community</h2>
+                    <h3>Featured</h3>
+                    <div id="featuredStory" class="hidden"></div>
+                    <p id="communityFeaturedEmpty" class="feedEmpty">
+                        No public stories yet. Publish one from the Story tab to get things started.
+                    </p>
+                    <h3>Recent Stories</h3>
+                    <div class="otherStories" id="communityStories"></div>
+                    <p id="communityStoriesEmpty" class="feedEmpty hidden">Nothing else published yet.</p>
+                </section>
+                <section id="testSection" class="inactive s6">
+                </section>
+            </main>
+            <header>
+                <h1>ReelLife</h1>
+                <nav>
+                    <div class="button" id="self"><img src="Me Icon.svg" />Me</div>
+                    <div class="button" id="family"><img src="Family Icon.svg" />Family</div>
+                    <div class="button" id="story"><img src="Story Icon.svg" />Story</div>
+                    <div class="button" id="friends"><img src="Friends Icon.svg" />Friends</div>
+                    <div class="button" id="community"><img src="Community Icon.svg" />Community</div>
+                </nav>
+                <button type="button" id="headerLogoutButton">Log out</button>
+            </header>
+        </div>
+        <!-- Publish dialog (Story tab) and story reader (Friends/Community
+             tabs). Both live outside <main> on purpose: script.js treats every
+             "main > section" as a page to slide in and out. -->
+        <div id="publishModal" class="modalOverlay hidden">
+            <div class="modalCard">
+                <h3 id="publishModalTitle">Publish your story</h3>
+                <form id="publishForm" class="publishForm">
+                    <label>Title
+                        <input id="publishTitle" type="text" maxlength="120" required />
+                    </label>
+                    <label>Short summary
+                        <textarea id="publishSummary" maxlength="500" rows="2"
+                            placeholder="A line or two to draw people in"></textarea>
+                    </label>
+                    <div class="publishRow">
+                        <label>Place
+                            <input id="publishPlace" type="text" maxlength="100" placeholder="Chicago" />
+                        </label>
+                        <label>Time period
+                            <input id="publishTimePeriod" type="text" maxlength="100" placeholder="1950s-Present" />
+                        </label>
+                    </div>
+                    <label>Tags
+                        <input id="publishTags" type="text" placeholder="Family, Culture/Faith" />
+                    </label>
+                    <label>Who can read it
+                        <select id="publishVisibility">
+                            <option value="private">Only me</option>
+                            <option value="friends">My friends</option>
+                            <option value="public">Everyone (Community)</option>
+                        </select>
+                    </label>
+                    <label>Story text
+                        <textarea id="publishContent" class="publishContent" rows="8"></textarea>
+                    </label>
+                    <p id="publishError" class="publishError hidden"></p>
+                    <div class="modalActions">
+                        <button type="button" id="unpublishBtn" class="dangerButton hidden">Unpublish</button>
+                        <span class="modalSpacer"></span>
+                        <button type="button" id="publishCancelBtn">Cancel</button>
+                        <button type="submit" id="publishSubmitBtn">Publish</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div id="storyModal" class="modalOverlay hidden">
+            <div class="modalCard">
+                <h3 id="storyModalTitle"></h3>
+                <p id="storyModalByline" class="byAuthor"></p>
+                <p id="storyModalSetting" class="setting"></p>
+                <p id="storyModalTags" class="tags"></p>
+                <div id="storyModalContent" class="storyModalContent"></div>
+                <div class="imageUpload">
+                    <input type="file" id="storyImageUpload" accept="image/*">
+                </div>
+                <div class="modalActions">
+                    <span class="modalSpacer"></span>
+                    <button type="button" id="storyAddFriendBtn" class="hidden">Add friend</button>
+                    <button type="button" id="storyModalCloseBtn">Close</button>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript" src="config.js"></script>
+        <script type="text/javascript" src="storage_api.js"></script>
+        <!-- script.js defines restoreLastPage(), which profile.js calls. -->
+        <script type="text/javascript" src="script.js"></script>
+        <script type="text/javascript" src="profile.js"></script>
+        <script type="text/javascript" src="family.js"></script>
+        <script type="text/javascript" src="testChat.js"></script>
+        <script type="text/javascript" src="stories.js"></script>
+        <script type="text/javascript" src="friends.js"></script>
+        <script type="module" src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.esm.js"></script>
+        <script nomodule src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.js"></script>
+    </body>
+</html>

@@ -3,6 +3,11 @@
 # ReelLife Development Mode Startup Script
 # Uses config.json for AWS credentials
 
+# Work from the repo root so config.json, node_modules and the frontend paths
+# below resolve the same way no matter where this script is invoked from.
+cd "$(dirname "$0")" || exit 1
+REPO_ROOT="$(pwd)"
+
 echo "🔧 Starting ReelLife API in DEVELOPMENT mode..."
 echo ""
 
@@ -57,26 +62,59 @@ if [ ! -f "config.json" ]; then
     exit 1
 fi
 
-# Navigate to server directory
-cd src/server
-
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
+# Check if node_modules exists (dependencies are declared in the repo-root
+# package.json, which src/server/server.js resolves through the repo root)
+if [ ! -d "$REPO_ROOT/node_modules" ]; then
     echo "📦 Installing dependencies..."
-    npm install
-    if [ $? -ne 0 ]; then
+    if ! (cd "$REPO_ROOT" && npm install); then
         echo "❌ Failed to install dependencies"
         exit 1
     fi
 fi
 
+# Navigate to server directory
+cd "$REPO_ROOT/src/server"
+
 # Set development environment
 export NODE_ENV=development
+
+# The page server.js serves: "/" redirects to /public/index.html, and the app's
+# pages live in src/frontend/public (src/frontend/pages is empty).
+PORT=$(node -p "require('$REPO_ROOT/config.json').server.port || 3000" 2>/dev/null)
+PORT=${PORT:-3000}
+START_URL="http://localhost:${PORT}/public/index.html"
+
+if [ ! -f "$REPO_ROOT/src/frontend/public/index.html" ]; then
+    echo "❌ Error: starting page not found: src/frontend/public/index.html"
+    echo "The server would redirect '/' to a page that isn't there."
+    exit 1
+fi
+
+# Open the starting page once the server is actually answering. Runs in the
+# background so node stays in the foreground; skipped when NO_OPEN is set.
+if [ -z "$NO_OPEN" ] && command -v curl &> /dev/null; then
+    if command -v open &> /dev/null || command -v xdg-open &> /dev/null; then
+        (
+            for _ in $(seq 1 40); do
+                if curl -sf -o /dev/null "$START_URL"; then
+                    if command -v open &> /dev/null; then
+                        open "$START_URL"
+                    else
+                        xdg-open "$START_URL"
+                    fi
+                    exit 0
+                fi
+                sleep 0.25
+            done
+        ) &
+    fi
+fi
 
 # Start server
 echo ""
 echo "🚀 Starting server..."
-echo "📍 URL: http://localhost:3000"
+echo "📍 URL: $START_URL"
+echo "📍 http://localhost:${PORT}/ redirects to the same page"
 echo "📍 Press Ctrl+C to stop"
 echo ""
 node server.js

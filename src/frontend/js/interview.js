@@ -1,8 +1,14 @@
 // ReelLife Interview Client
 // Connects to backend API with AWS Bedrock (Anthropic Claude)
 
-// Auto-detect API URL: use current origin in production, localhost in development
-const API_BASE_URL = window.location.protocol === 'file:'
+// Auto-detect API URL: use current origin in production, localhost in
+// development.
+//
+// Deliberately not named API_BASE_URL: config.js declares that name for the
+// same-origin accounts API, and two top-level `const`s of the same name in one
+// page is a SyntaxError -- which silently killed this whole file and left the
+// interview page with no client at all.
+const INTERVIEW_API_BASE_URL = window.location.protocol === 'file:'
 ? 'http://localhost:3000/api'
 : '/api';
 
@@ -17,6 +23,11 @@ class InterviewClient {
     this.microphoneStream = null;
     this.currentTranscript = '';
     this.captionsEnabled = false;
+    // The most recent question, plus a hook the hosting page uses to save each
+    // exchange (see public/interviewStorage.js). Plain fields on purpose: this
+    // client has no storage dependency of its own.
+    this.lastQuestion = null;
+    this.onTurn = null;
     this.initSpeechRecognition();
   }
 
@@ -163,7 +174,7 @@ class InterviewClient {
   // Start interview session
   async startInterview(mode) {
     try {
-      const response = await fetch(`${API_BASE_URL}/interview/start`, {
+      const response = await fetch(`${INTERVIEW_API_BASE_URL}/interview/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,6 +202,47 @@ class InterviewClient {
     }
   }
 
+  // Resume a recorded interview. `history` is the saved exchange, oldest first,
+  // as [{ role: 'assistant' | 'user', content }]. It's redrawn in the chat and
+  // handed to the server, which seeds a new session with it and asks the next
+  // question. Drawn without addUserMessage()/onTurn on purpose: these turns are
+  // already saved, and replaying them through the hook would store them twice.
+  async resumeInterview(mode, history) {
+    try {
+      const response = await fetch(`${INTERVIEW_API_BASE_URL}/interview/resume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: mode || 'Life Period',
+          history,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to resume interview');
+      }
+
+      for (const entry of history) {
+        this.renderMessage(entry.role === 'assistant' ? 'question' : 'answer', entry.content);
+        this.conversationHistory.push({ role: entry.role, content: entry.content });
+        if (entry.role === 'assistant') this.lastQuestion = entry.content;
+      }
+
+      this.sessionId = data.sessionId;
+      this.addAssistantMessage(data.question);
+      console.log('✅ Interview resumed:', this.sessionId);
+      return data.question;
+    } catch (error) {
+      console.error('Error resuming interview:', error);
+      this.showError('Failed to resume interview. Please check if the server is running.');
+      throw error;
+    }
+  }
+
   // Send user response and get next question
   async sendResponse(response) {
     if (!this.sessionId) {
@@ -202,7 +254,7 @@ class InterviewClient {
       // Show loading indicator
       this.showTypingIndicator();
 
-      const apiResponse = await fetch(`${API_BASE_URL}/interview/respond`, {
+      const apiResponse = await fetch(`${INTERVIEW_API_BASE_URL}/interview/respond`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -240,7 +292,7 @@ class InterviewClient {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/interview/end`, {
+      const response = await fetch(`${INTERVIEW_API_BASE_URL}/interview/end`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -314,38 +366,45 @@ class InterviewClient {
     }
   }
 
-  // Add user message to chat
-  addUserMessage(text) {
+  // Draw one chat bubble. `kind` is 'question' (the interviewer) or 'answer'.
+  renderMessage(kind, text) {
     const chatContainer = document.querySelector('.chat-container');
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'message answer';
+    messageDiv.className = `message ${kind}`;
     messageDiv.innerHTML = `
       <div class="message-bubble">${this.escapeHtml(text)}</div>
     `;
     chatContainer.appendChild(messageDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  // Add user message to chat
+  addUserMessage(text) {
+    this.renderMessage('answer', text);
 
     this.conversationHistory.push({
       role: 'user',
       content: text,
     });
+
+    // Fires for every answer the storyteller gives -- spoken or typed. The
+    // question is the one that prompted it, read before the follow-up question
+    // arrives, so the pair stays in step.
+    if (this.onTurn) this.onTurn({ question: this.lastQuestion, answer: text });
   }
 
   // Add assistant message to chat
   addAssistantMessage(text) {
-    const chatContainer = document.querySelector('.chat-container');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message question';
-    messageDiv.innerHTML = `
-      <div class="message-bubble">${this.escapeHtml(text)}</div>
-    `;
-    chatContainer.appendChild(messageDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    this.renderMessage('question', text);
 
     this.conversationHistory.push({
       role: 'assistant',
       content: text,
     });
+
+    // Remembered so the answer that follows can be saved together with the
+    // question it was answering.
+    this.lastQuestion = text;
   }
 
   // Show typing indicator
