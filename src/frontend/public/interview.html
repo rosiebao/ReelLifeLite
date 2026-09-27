@@ -64,6 +64,38 @@
       padding: 0.5rem 1rem;
     }
 
+    /* Voice on/off for the interviewer's questions (read aloud by default). */
+    .voice-toggle {
+      background: none;
+      border: 1px solid var(--color-border-gray);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.85rem;
+      color: var(--color-navy);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .voice-toggle.off {
+      color: var(--color-text-gray);
+    }
+
+    /* "Listen" under each question bubble. */
+    .speak-button {
+      align-self: flex-start;
+      margin-top: 0.35rem;
+      background: none;
+      border: none;
+      padding: 0.15rem 0.25rem;
+      font-size: 0.8rem;
+      color: var(--color-text-gray);
+      cursor: pointer;
+    }
+
+    .speak-button:hover {
+      color: var(--color-navy);
+    }
+
     .chat-container {
       flex: 1;
       /* Allow this flex child to shrink below its content height, so long
@@ -106,6 +138,18 @@
       background: var(--color-light-bg);
       color: var(--color-navy);
       border-bottom-right-radius: 0.25rem;
+    }
+
+    /* The answer being spoken right now (live transcript, not yet sent). */
+    .message.answer.draft .message-bubble {
+      background: transparent;
+      border: 1px dashed var(--color-border-gray);
+      color: var(--color-text-gray);
+      font-style: italic;
+    }
+
+    .record-hint.mic-problem {
+      color: #B45309;
     }
 
     .waveform {
@@ -377,6 +421,7 @@
       <!-- Whether the turns are reaching the Story tab's storage. Filled in by
            interviewStorage.js; stays empty while everything is saving fine. -->
       <span class="storage-status" id="storageStatus"></span>
+      <button class="voice-toggle" id="voiceToggle" type="button" aria-pressed="true">🔊 Voice on</button>
       <button class="end-button">End</button>
     </div>
 
@@ -427,10 +472,10 @@
 
     <!-- Audio recording controls (for audio mode) -->
     <div class="interview-controls" id="audioControls">
-      <button class="record-button" id="recordButton">
+      <button class="record-button" id="recordButton" aria-pressed="false" aria-label="Microphone on or off">
         🎤
       </button>
-      <p class="record-hint">Tap to pause</p>
+      <p class="record-hint" aria-live="polite">Tap the microphone to answer</p>
 
       <div class="control-buttons">
         <button class="control-btn" id="captionsBtn">
@@ -489,6 +534,61 @@
     // Every answer the storyteller gives is handed to interviewStorage.js, which
     // saves the exchange into a conversation the Story tab can list and publish.
     interviewClient.onTurn = (turn) => interviewStorage.rememberTurn(turn.question, turn.answer);
+
+    // Questions are read aloud (js/interview.js). The header button turns that
+    // on or off (remembered across interviews); the record hint says when the
+    // microphone is waiting for a question to finish.
+    const voiceToggle = document.getElementById('voiceToggle');
+    function renderVoiceToggle(enabled) {
+      voiceToggle.textContent = enabled ? '🔊 Voice on' : '🔈 Voice off';
+      voiceToggle.classList.toggle('off', !enabled);
+      voiceToggle.setAttribute('aria-pressed', String(enabled));
+      voiceToggle.title = enabled ? 'Questions are read aloud — click to mute' : 'Click to hear questions read aloud';
+    }
+    if ('speechSynthesis' in window) {
+      renderVoiceToggle(interviewClient.voiceEnabled);
+      voiceToggle.addEventListener('click', () => {
+        renderVoiceToggle(interviewClient.setVoiceEnabled(!interviewClient.voiceEnabled));
+      });
+      interviewClient.onVoiceChange = renderVoiceToggle;
+    } else {
+      voiceToggle.style.display = 'none';
+    }
+
+    // The hint under the record button: what the microphone is doing right
+    // now. "Speaking…" (a question being read aloud) takes priority; after it
+    // the microphone's own state shows again, so the two never overwrite each
+    // other.
+    const MIC_HINTS = {
+      idle: { text: 'Tap the microphone to answer' },
+      connecting: { text: 'Starting the microphone…' },
+      listening: { text: 'Listening… just talk, then pause when you’re done' },
+      reconnecting: { text: 'Reconnecting the microphone…', problem: true },
+      offline: { text: 'You’re offline — listening resumes when the connection is back', problem: true },
+      'no-microphone': { text: 'No microphone found — check it’s plugged in and not used by another app', problem: true },
+      blocked: { text: 'Microphone blocked — allow it in the address bar, then tap 🎤', problem: true },
+      paused: { text: 'Paused - tap to continue' },
+    };
+    function renderRecordHint() {
+      const hint = document.querySelector('.record-hint');
+      if (!hint) return;
+      if (interviewClient.isSpeaking) {
+        hint.textContent = isRecording
+          ? '🔊 Speaking… the microphone listens again when the question ends'
+          : '🔊 Speaking…';
+        hint.classList.remove('mic-problem');
+        return;
+      }
+      const info = MIC_HINTS[interviewClient.micState] || MIC_HINTS.idle;
+      hint.textContent = info.text;
+      hint.classList.toggle('mic-problem', Boolean(info.problem));
+    }
+    interviewClient.onSpeakingChange = renderRecordHint;
+    interviewClient.onMicStateChange = (state) => {
+      // Microphone permission was withdrawn mid-interview: show the button as off.
+      if (state === 'blocked' && isRecording) setRecordButton(false);
+      renderRecordHint();
+    };
 
     // Inside the Story tab this page runs in a frame (openInterviewPanel() in
     // testChat.js). There, "back" means closing the pane -- history.back() would
@@ -605,10 +705,11 @@
 
     // Record button handler
     const recordButton = document.getElementById('recordButton');
-    recordButton.addEventListener('click', async function() {
-      isRecording = await interviewClient.toggleRecording();
 
-      if (isRecording) {
+    // Button + timer for "microphone on" / "microphone off".
+    function setRecordButton(on) {
+      isRecording = on;
+      if (on) {
         // Start or resume timer
         if (!startTime) {
           // First time starting - initialize timer
@@ -621,9 +722,9 @@
           isPaused = false;
         }
 
-        this.textContent = '🎤';
-        this.style.background = '#EF4444'; // Red when recording
-        document.querySelector('.record-hint').textContent = 'Recording... tap to pause';
+        recordButton.textContent = '🎤';
+        recordButton.style.background = '#EF4444'; // Red when recording
+        recordButton.setAttribute('aria-pressed', 'true');
       } else {
         // Paused - stop timer but keep elapsed time
         if (timerInterval) {
@@ -632,9 +733,23 @@
           isPaused = true;
         }
 
-        this.textContent = '▶️';
-        this.style.background = 'var(--color-navy)';
-        document.querySelector('.record-hint').textContent = 'Paused - tap to continue';
+        recordButton.textContent = '▶️';
+        recordButton.style.background = 'var(--color-navy)';
+        recordButton.setAttribute('aria-pressed', 'false');
+      }
+      renderRecordHint();
+    }
+
+    let recordToggleBusy = false;
+    recordButton.addEventListener('click', async function() {
+      // Ignore a second tap while the first is still asking for permission --
+      // it used to start and immediately stop the microphone.
+      if (recordToggleBusy) return;
+      recordToggleBusy = true;
+      try {
+        setRecordButton(await interviewClient.toggleRecording());
+      } finally {
+        recordToggleBusy = false;
       }
     });
 
@@ -705,6 +820,17 @@
       }
 
       try {
+        // Anything said just before tapping End is still part of the story.
+        const unsent = interviewClient.takeUnsentAnswer();
+        if (unsent) {
+          interviewClient.addUserMessage(unsent);
+          try {
+            await interviewClient.sendResponse(unsent);
+          } catch (err) {
+            // The chapter can still be written from what was saved before.
+          }
+        }
+
         // Stop recording and cleanup
         interviewClient.cleanup();
 
