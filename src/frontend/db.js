@@ -11,14 +11,30 @@ const { DatabaseSync } = require("node:sqlite");
 //   absolute path   -> used as is
 //   relative path   -> resolved against the directory the process started in
 //   ":memory:"      -> a throwaway in-memory database (nothing written to disk)
+//   a directory     -> app.db inside it. Applies to an existing directory or a
+//                      path ending in "/", e.g. DATABASE_PATH=/data where /data
+//                      is a mounted disk (Render, Docker volumes).
 // Kept separate from opening the file so it can be tested on its own.
-const DEFAULT_DB_PATH = path.join(__dirname, "app.db");
+const DB_FILE_NAME = "app.db";
+const DEFAULT_DB_PATH = path.join(__dirname, DB_FILE_NAME);
+
+function isDirectory(p) {
+    try {
+        return fs.statSync(p).isDirectory();
+    } catch {
+        return false;
+    }
+}
 
 function resolveDatabasePath(env = process.env, cwd = process.cwd()) {
     const raw = typeof env.DATABASE_PATH === "string" ? env.DATABASE_PATH.trim() : "";
     if (!raw) return DEFAULT_DB_PATH;
     if (raw === ":memory:") return raw;
-    return path.resolve(cwd, raw);
+    const resolved = path.resolve(cwd, raw);
+    if (/[\\/]$/.test(raw) || isDirectory(resolved)) {
+        return path.join(resolved, DB_FILE_NAME);
+    }
+    return resolved;
 }
 
 function openDatabase(dbPath) {

@@ -75,6 +75,9 @@ Tables are created automatically on startup -- no migration step.
 - **Relative path:** resolved against the directory the process starts in.
   `start-dev.sh` resolves it against the directory you run the script from,
   before it changes into `src/server`.
+- **A directory:** if the path is an existing folder, or ends with `/`,
+  `app.db` is created inside it. For example, `DATABASE_PATH=/data` with a
+  disk mounted at `/data` (as on Render) uses `/data/app.db`.
 - **`:memory:`:** a throwaway in-memory database. Nothing is written to disk,
   and everything is lost when the server stops.
 

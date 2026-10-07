@@ -46,6 +46,32 @@ test("surrounding spaces are ignored", () => {
     assert.equal(resolveDatabasePath({ DATABASE_PATH: `  ${absolute}  ` }, "/x"), absolute);
 });
 
+test("a DATABASE_PATH that is a directory gets app.db inside it", () => {
+    // An existing folder, e.g. a mounted disk like DATABASE_PATH=/data on Render.
+    const dir = fs.mkdtempSync(path.join(scratch, "mount-"));
+    assert.equal(resolveDatabasePath({ DATABASE_PATH: dir }, "/x"), path.join(dir, "app.db"));
+    // A trailing slash marks a folder even if it doesn't exist yet.
+    const missing = path.join(scratch, "future-dir");
+    assert.equal(resolveDatabasePath({ DATABASE_PATH: missing + "/" }, "/x"), path.join(missing, "app.db"));
+    assert.equal(resolveDatabasePath({ DATABASE_PATH: "data/" }, cwdFor("p")), path.join(cwdFor("p"), "data", "app.db"));
+});
+
+test("a directory DATABASE_PATH opens app.db inside it", () => {
+    const dir = fs.mkdtempSync(path.join(scratch, "mounted-"));
+    const result = spawnSync(process.execPath, ["-e", "process.stdout.write(require('./db').DB_PATH)"], {
+        cwd: path.join(__dirname, ".."),
+        env: { ...process.env, DATABASE_PATH: dir },
+        encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, path.join(dir, "app.db"));
+    assert.ok(fs.existsSync(path.join(dir, "app.db")), "app.db created inside the folder");
+});
+
+function cwdFor(name) {
+    return path.join(os.tmpdir(), name);
+}
+
 test(":memory: is passed through for a throwaway database", () => {
     assert.equal(resolveDatabasePath({ DATABASE_PATH: ":memory:" }, "/x"), ":memory:");
 });
