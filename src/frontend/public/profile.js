@@ -1,6 +1,15 @@
 function goToLogin() {
-    storageApi.logout();
     window.location.href = "login.html";
+}
+
+// Revoke the session (server + local token) before leaving the page, so the
+// login page -- and anything loaded after it -- sees the user as signed out.
+let loggingOut = false;
+async function logOut() {
+    if (loggingOut) return;
+    loggingOut = true;
+    await storageApi.logout();
+    goToLogin();
 }
 
 (async function loadProfile() {
@@ -21,10 +30,15 @@ function goToLogin() {
         // script.js, which index.html loads before this file.
         restoreLastPage();
     } catch (err) {
-        goToLogin();
+        // A 401 already cleared the token; anything else (server down, etc.)
+        // still means we can't confirm the session, so sign out cleanly.
+        await logOut();
     }
 })();
 
 // Two ways out: the button in the header and the one on the account page.
-document.querySelector("#logoutButton").addEventListener("click", goToLogin);
-document.querySelector("#headerLogoutButton").addEventListener("click", goToLogin);
+// Looked up defensively: a missing button must not stop the other one (or the
+// rest of this script) from working.
+for (const selector of ["#logoutButton", "#headerLogoutButton"]) {
+    document.querySelector(selector)?.addEventListener("click", logOut);
+}

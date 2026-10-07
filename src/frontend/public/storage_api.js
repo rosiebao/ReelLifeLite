@@ -39,7 +39,8 @@ async function parseErrorDetail(response) {
 // errors into ApiError. There's no refresh token in this API -- a 401 just
 // means the session is gone, so callers should clear it and send the user
 // back to login.html.
-async function apiFetch(path, { method = "GET", body, auth = true } = {}) {
+// keepalive lets a request finish even if the page navigates away meanwhile.
+async function apiFetch(path, { method = "GET", body, auth = true, keepalive = false } = {}) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth) {
@@ -51,6 +52,7 @@ async function apiFetch(path, { method = "GET", body, auth = true } = {}) {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    keepalive,
   });
 
   if (!response.ok) {
@@ -79,12 +81,18 @@ const storageApi = {
   },
 
   async logout() {
+    // apiFetch reads the token synchronously when called, so the request
+    // already carries it; clearing right after means the user is signed out
+    // locally even if the server call is slow, fails, or the page navigates
+    // away before it finishes (keepalive lets the server revoke it anyway).
+    const request = tokenStore.get()
+      ? apiFetch("/logout", { method: "POST", keepalive: true })
+      : Promise.resolve();
+    tokenStore.clear();
     try {
-      await apiFetch("/logout", { method: "POST" });
+      await request;
     } catch {
-      // Best-effort; clear the local token either way.
-    } finally {
-      tokenStore.clear();
+      // Best-effort; the local token is already gone.
     }
   },
 
