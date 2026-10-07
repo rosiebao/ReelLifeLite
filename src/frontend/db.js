@@ -2,12 +2,45 @@
 // (this used to live in ../database as a Python/FastAPI service -- kept there
 // unused for reference). Uses node:sqlite (built-in, no native dependency to
 // compile) rather than a third-party driver.
+const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, "app.db");
+// Where the SQLite file lives, from the DATABASE_PATH environment variable.
+//   unset / blank   -> src/frontend/app.db (next to this file), as before
+//   absolute path   -> used as is
+//   relative path   -> resolved against the directory the process started in
+//   ":memory:"      -> a throwaway in-memory database (nothing written to disk)
+// Kept separate from opening the file so it can be tested on its own.
+const DEFAULT_DB_PATH = path.join(__dirname, "app.db");
 
-const db = new DatabaseSync(DB_PATH);
+function resolveDatabasePath(env = process.env, cwd = process.cwd()) {
+    const raw = typeof env.DATABASE_PATH === "string" ? env.DATABASE_PATH.trim() : "";
+    if (!raw) return DEFAULT_DB_PATH;
+    if (raw === ":memory:") return raw;
+    return path.resolve(cwd, raw);
+}
+
+function openDatabase(dbPath) {
+    if (dbPath !== ":memory:") {
+        // A fresh location (e.g. a mounted volume or data/ folder) may not
+        // exist yet; SQLite won't create the folder itself.
+        fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    }
+    try {
+        return new DatabaseSync(dbPath);
+    } catch (err) {
+        throw new Error(
+            `Could not open the database at ${dbPath} (from DATABASE_PATH=${JSON.stringify(
+                process.env.DATABASE_PATH ?? ""
+            )}): ${err.message}`
+        );
+    }
+}
+
+const DB_PATH = resolveDatabasePath();
+
+const db = openDatabase(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
 
 db.exec(`
@@ -194,4 +227,4 @@ db.exec(`
 // which the UNIQUE(requester_id, addressee_id) index above can't serve.
 db.exec("CREATE INDEX IF NOT EXISTS friendships_addressee ON friendships (addressee_id, status)");
 
-module.exports = { db, DB_PATH };
+module.exports = { db, DB_PATH, DEFAULT_DB_PATH, resolveDatabasePath };

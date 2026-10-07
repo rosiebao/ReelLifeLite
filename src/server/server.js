@@ -15,6 +15,8 @@ const { router: conversationsRouter } = require('../frontend/conversations');
 const { router: familyRouter } = require('../frontend/family');
 const { router: friendsRouter } = require('../frontend/friends');
 const { router: storiesRouter } = require('../frontend/stories');
+// Already opened by the routers above; read here only to report where it is.
+const { DB_PATH } = require('../frontend/db');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -551,6 +553,7 @@ app.listen(PORT, () => {
   console.log(`📦 Mode: ${IS_PRODUCTION ? 'Production (IAM Role)' : 'Development (config.json)'}`);
   console.log(`📍 AWS Region: ${config.aws.region}`);
   console.log(`🤖 Model: ${config.anthropic.modelId}`);
+  console.log(`🗄️  Database: ${DB_PATH}${process.env.DATABASE_PATH ? ' (DATABASE_PATH)' : ' (default)'}`);
   console.log(`🔒 Auth: ${IS_PRODUCTION ? 'IAM Role' : 'Static Credentials'}`);
   console.log('='.repeat(60));
   console.log('✅ Ready to conduct interviews with Claude!');

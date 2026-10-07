@@ -5,6 +5,7 @@
 
 # Work from the repo root so config.json, node_modules and the frontend paths
 # below resolve the same way no matter where this script is invoked from.
+INVOKED_FROM="$(pwd)"
 cd "$(dirname "$0")" || exit 1
 REPO_ROOT="$(pwd)"
 
@@ -72,6 +73,19 @@ if [ ! -d "$REPO_ROOT/node_modules" ]; then
     fi
 fi
 
+# Where the SQLite database lives. DATABASE_PATH is optional: unset means the
+# default, src/frontend/app.db. A relative path is taken relative to the
+# directory this script was run from, before the cd below changes it.
+#   DATABASE_PATH=/var/lib/reellife/app.db ./start-dev.sh
+#   DATABASE_PATH=data/app.db ./start-dev.sh
+if [ -n "$DATABASE_PATH" ] && [ "$DATABASE_PATH" != ":memory:" ]; then
+    case "$DATABASE_PATH" in
+        /*) ;;
+        *) DATABASE_PATH="$INVOKED_FROM/$DATABASE_PATH" ;;
+    esac
+    export DATABASE_PATH
+fi
+
 # Navigate to server directory
 cd "$REPO_ROOT/src/server"
 
@@ -115,6 +129,7 @@ echo ""
 echo "🚀 Starting server..."
 echo "📍 URL: $START_URL"
 echo "📍 http://localhost:${PORT}/ redirects to the same page"
+echo "🗄️  Database: ${DATABASE_PATH:-$REPO_ROOT/src/frontend/app.db (default)}"
 echo "📍 Press Ctrl+C to stop"
 echo ""
 node server.js

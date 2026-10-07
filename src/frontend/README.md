@@ -63,8 +63,37 @@ Tables are created automatically on startup -- no migration step.
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `6767` | Port the Express app listens on |
-| `DATABASE_PATH` | `./app.db` | SQLite file path |
+| `DATABASE_PATH` | `src/frontend/app.db` | SQLite file path (see below) |
 | `MEDIA_ROOT` | `./conversation_files` | Where transcripts/media attachments are written |
+
+`DATABASE_PATH` (read in `db.js`):
+
+- **Unset or blank:** `app.db` next to `db.js` (`src/frontend/app.db`), the
+  same file as before, wherever the server is started from.
+- **Absolute path:** used as is, e.g. `/var/lib/reellife/app.db` on a server
+  or a mounted volume in a container.
+- **Relative path:** resolved against the directory the process starts in.
+  `start-dev.sh` resolves it against the directory you run the script from,
+  before it changes into `src/server`.
+- **`:memory:`:** a throwaway in-memory database. Nothing is written to disk,
+  and everything is lost when the server stops.
+
+A missing parent folder is created on startup. If the file can't be opened,
+the server stops with an error that names the path, rather than starting
+without a database. The server prints the database path it's using when it
+starts.
+
+```bash
+# A database outside the repo
+DATABASE_PATH=/var/lib/reellife/app.db ./start-dev.sh
+
+# Separate demo data, under ./data (relative to where you run this)
+DATABASE_PATH=data/demo.db ./start-dev.sh
+```
+
+Point `DATABASE_PATH` at a location outside the repo for real data. The default
+`src/frontend/app.db` is git-ignored, but any other path inside the repo is
+not, so add it to `.gitignore` if you keep one there.
 
 ## Running the tests
 
