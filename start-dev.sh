@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ReelLife Development Mode Startup Script
-# Uses config.json for AWS credentials
+# Uses src/.env for AWS credentials
 
-# Work from the repo root so config.json, node_modules and the frontend paths
+# Work from the repo root so src/.env, node_modules and the frontend paths
 # below resolve the same way no matter where this script is invoked from.
 INVOKED_FROM="$(pwd)"
 cd "$(dirname "$0")" || exit 1
@@ -47,34 +47,24 @@ fi
 NODE_VERSION=$(node --version)
 echo "✅ Node.js version: $NODE_VERSION"
 
-# Check if config.json exists
-if [ ! -f "config.json" ]; then
-    echo "❌ Error: config.json not found!"
-    echo ""
-    echo "Please create config.json with your AWS credentials."
-    echo "You can copy from the example:"
-    echo ""
-    echo "  1. Copy the template:"
-    echo "     cp .env.example config.json.template"
-    echo ""
-    echo "  2. Edit config.json and add your credentials"
-    echo ""
-    echo "See API_SETUP.md for detailed instructions."
-    exit 1
+# Check if src/.env exists (optional: without it the AI interviewer falls
+# back to canned questions)
+if [ ! -f "$REPO_ROOT/src/.env" ]; then
+    echo "Note: src/.env not found - the AI interviewer will use canned questions."
 fi
 
-# Check if node_modules exists (dependencies are declared in the repo-root
-# package.json, which src/server/server.js resolves through the repo root)
-if [ ! -d "$REPO_ROOT/node_modules" ]; then
+# Check if node_modules exists (dependencies are declared in src/package.json,
+# which src/app.js resolves through src)
+if [ ! -d "$REPO_ROOT/src/node_modules" ]; then
     echo "📦 Installing dependencies..."
-    if ! (cd "$REPO_ROOT" && npm install); then
+    if ! (cd "$REPO_ROOT/src" && npm install); then
         echo "❌ Failed to install dependencies"
         exit 1
     fi
 fi
 
 # Where the SQLite database lives. DATABASE_PATH is optional: unset means the
-# default, src/frontend/app.db. A relative path is taken relative to the
+# default, src/app.db. A relative path is taken relative to the
 # directory this script was run from, before the cd below changes it.
 #   DATABASE_PATH=/var/lib/reellife/app.db ./start-dev.sh
 #   DATABASE_PATH=data/app.db ./start-dev.sh
@@ -87,19 +77,19 @@ if [ -n "$DATABASE_PATH" ] && [ "$DATABASE_PATH" != ":memory:" ]; then
 fi
 
 # Navigate to server directory
-cd "$REPO_ROOT/src/server"
+cd "$REPO_ROOT/src"
 
 # Set development environment
 export NODE_ENV=development
 
-# The page server.js serves: "/" redirects to /public/index.html, and the app's
-# pages live in src/frontend/public (src/frontend/pages is empty).
-PORT=$(node -p "require('$REPO_ROOT/config.json').server.port || 3000" 2>/dev/null)
-PORT=${PORT:-3000}
-START_URL="http://localhost:${PORT}/public/index.html"
+# The page app.js serves: express.static serves src/public at "/", so the
+# starting page is src/public/index.html.
+PORT="${PORT:-$(grep -E '^[[:space:]]*PORT=' "$REPO_ROOT/src/.env" 2>/dev/null | tail -1 | cut -d '=' -f2 | tr -d '[:space:]')}"
+PORT=${PORT:-6767}
+START_URL="http://localhost:${PORT}/"
 
-if [ ! -f "$REPO_ROOT/src/frontend/public/index.html" ]; then
-    echo "❌ Error: starting page not found: src/frontend/public/index.html"
+if [ ! -f "$REPO_ROOT/src/public/index.html" ]; then
+    echo "❌ Error: starting page not found: src/public/index.html"
     echo "The server would redirect '/' to a page that isn't there."
     exit 1
 fi
@@ -128,8 +118,7 @@ fi
 echo ""
 echo "🚀 Starting server..."
 echo "📍 URL: $START_URL"
-echo "📍 http://localhost:${PORT}/ redirects to the same page"
-echo "🗄️  Database: ${DATABASE_PATH:-$REPO_ROOT/src/frontend/app.db (default)}"
+echo "🗄️  Database: ${DATABASE_PATH:-$REPO_ROOT/src/app.db (default)}"
 echo "📍 Press Ctrl+C to stop"
 echo ""
-node server.js
+node app.js
