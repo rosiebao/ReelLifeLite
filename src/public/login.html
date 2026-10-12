@@ -9,25 +9,50 @@
     </head>
     <body>
         <div class="background"></div>
-        <h1>ReelLife</h1>
-        <div class="loginBox">
-            <div class="toSignIn">
-                <h2>Don't Have an Account?</h2>
-                <p>Sign up here to join the ReelLife Community</p>
-                <a href="javascript:;" id="toggleMode">SIGN UP</a>
-            </div>
-            <div class="login">
-                <h2 id="formTitle">Login</h2>
-                <div>
-                    <p id="usernameField" class="hidden">Username: <input type="text" id="username"></p>
-                    <p>Email:<br /> <input type="text" id="email"></p>
-                    <p>Password:<br /> <input type="password" id="password" minlength="8"></p>
-                    <p id="passwordHint" class="hint hidden">At least 8 characters</p>
-                    <p id="errorMessage" class="error"></p>
-                    <div id="signInButton" role="button" tabindex="0">Sign In</div>
-                </div>
-            </div>
-        </div>
+        <main class="authCard">
+            <!-- Brand panel: the logo already carries the name and tagline. -->
+            <section class="brandPanel">
+                <img src="ReelLife_Logo.jpg" alt="ReelLife: Real lives. Real stories. Lasting legacies." />
+            </section>
+
+            <section class="formPanel">
+                <span class="accent" aria-hidden="true"></span>
+                <h1 id="formTitle">Welcome back</h1>
+                <p id="formSubtitle" class="subtitle">Sign in to continue your ReelLife journey.</p>
+
+                <form id="authForm" class="formCard" novalidate>
+                    <div id="usernameField" class="field hidden">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" autocomplete="username" placeholder="Your name on ReelLife" />
+                    </div>
+                    <div class="field">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" autocomplete="email" placeholder="you@example.com" />
+                    </div>
+                    <div class="field">
+                        <label for="password">Password</label>
+                        <div class="passwordWrap">
+                            <input type="password" id="password" minlength="8" autocomplete="current-password" />
+                            <button type="button" id="togglePassword" class="eyeButton" aria-label="Show password" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                                    <path d="M12 5C6.5 5 2.7 9.1 1.5 12c1.2 2.9 5 7 10.5 7s9.3-4.1 10.5-7C21.3 9.1 17.5 5 12 5Zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9Zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" fill="currentColor" />
+                                </svg>
+                            </button>
+                        </div>
+                        <p id="passwordHint" class="hint hidden">At least 8 characters</p>
+                    </div>
+                    <p id="errorMessage" class="error" role="alert" aria-live="polite"></p>
+                    <button type="submit" id="signInButton">Sign in</button>
+
+                    <div class="divider"><span>or</span></div>
+
+                    <p class="switchMode">
+                        <span id="switchPrompt">Don't have an account?</span><br />
+                        <a href="#" id="toggleMode">Create an account</a>
+                    </p>
+                </form>
+            </section>
+        </main>
     </body>
     <script src="config.js"></script>
     <script src="storage_api.js"></script>
