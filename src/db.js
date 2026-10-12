@@ -2,10 +2,45 @@
 // (this used to live in ../database as a Python/FastAPI service -- kept there
 // unused for reference). Uses node:sqlite (built-in, no native dependency to
 // compile) rather than a third-party driver.
+const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, "app.db");
+// Where the SQLite file lives, from the DATABASE_PATH environment variable:
+//   unset / blank   -> app.db next to this file
+//   ":memory:"      -> a throwaway in-memory database (nothing written to disk)
+//   a directory     -> app.db inside it. Applies to an existing directory or a
+//                      path ending in "/", e.g. DATABASE_PATH=/data where /data
+//                      is a mounted disk (Render, Docker volumes).
+//   anything else   -> the file itself, relative paths resolved against cwd
+const DB_FILE_NAME = "app.db";
+const DEFAULT_DB_PATH = path.join(__dirname, DB_FILE_NAME);
+
+function isDirectory(p) {
+    try {
+        return fs.statSync(p).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function resolveDatabasePath(env = process.env, cwd = process.cwd()) {
+    const raw = typeof env.DATABASE_PATH === "string" ? env.DATABASE_PATH.trim() : "";
+    if (!raw) return DEFAULT_DB_PATH;
+    if (raw === ":memory:") return raw;
+    const resolved = path.resolve(cwd, raw);
+    if (/[\\/]$/.test(raw) || isDirectory(resolved)) {
+        return path.join(resolved, DB_FILE_NAME);
+    }
+    return resolved;
+}
+
+const DB_PATH = resolveDatabasePath();
+
+// SQLite creates the file but not missing parent folders.
+if (DB_PATH !== ":memory:") {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
 
 const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
@@ -202,4 +237,4 @@ db.exec(`
 // which the UNIQUE(requester_id, addressee_id) index above can't serve.
 db.exec("CREATE INDEX IF NOT EXISTS friendships_addressee ON friendships (addressee_id, status)");
 
-module.exports = { db, DB_PATH };
+module.exports = { db, DB_PATH, DEFAULT_DB_PATH, resolveDatabasePath };

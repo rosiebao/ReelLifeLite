@@ -11,3 +11,4 @@ src/frontend/conversation_files/
 # SQLite database (accounts, password hashes, session tokens, conversations).
 # Created automatically by src/frontend/db.js on first run.
 src/frontend/app.db
+src/app.db

@@ -68,7 +68,7 @@ can also go in `frontend/.env` (see `.env.example`), which `npm start` reads.
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `6767` | Port the Express app listens on |
-| `DATABASE_PATH` | `./app.db` | SQLite file path |
+| `DATABASE_PATH` | `./app.db` | SQLite file path. A folder (e.g. `/data`, a mounted disk on Render) gets `app.db` inside it; missing folders are created |
 | `MEDIA_ROOT` | `./conversation_files` | Where transcripts/media attachments are written |
 | `INTERVIEW_AI` | *(unset)* | `bedrock` to have Claude run the Story tab's interview; anything else uses canned questions |
 | `INTERVIEW_MODEL` | `anthropic.claude-opus-5` | Bedrock model ID for the interviewer |
