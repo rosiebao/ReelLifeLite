@@ -94,22 +94,77 @@ function selectedConversation() {
     );
 }
 
-function conversationLabel(conversation) {
-    const when = new Date(conversation.creation_date).toLocaleString();
-    const kind = conversation.interview_mode ? `${conversation.interview_mode} interview` : "Conversation";
-    return `${kind} #${conversation.conversation_id} · ${when}`;
+// The interviewer's mode names, as the "Story topic" picker words them.
+const TOPIC_LABELS = Object.fromEntries(
+    [...interviewModeSelect.options].map((option) => [option.value, option.textContent])
+);
+
+function topicLabel(mode) {
+    return TOPIC_LABELS[mode] || mode;
 }
 
+// "June 18, 2026", as the story reader and both drawers show dates.
+function longDate(value) {
+    return new Date(value).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
+// One row in a Story-tab drawer ("Your Stories" / "Your Interviews"): a title
+// and a "Topic · date" line, opened by click or Enter. Shared with stories.js
+// so the two lists look and behave the same.
+function drawerItem({ title, meta, selected = false, onOpen }) {
+    const item = document.createElement("li");
+    item.className = "drawerItem";
+    item.classList.toggle("selected", selected);
+    item.tabIndex = 0;
+
+    const heading = document.createElement("span");
+    heading.className = "drawerItemTitle";
+    heading.textContent = title;
+    item.appendChild(heading);
+
+    const line = document.createElement("span");
+    line.className = "drawerItemMeta";
+    line.textContent = meta;
+    item.appendChild(line);
+
+    item.addEventListener("click", onOpen);
+    item.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") onOpen();
+    });
+    return item;
+}
+
+// An interview has no title of its own: it borrows the title of the story
+// published from it (stories.js keeps the list), or goes by its number.
+function conversationTitle(conversation) {
+    const story = (storyState.myStories || []).find((s) => s.conversation_id === conversation.conversation_id);
+    return story ? story.title : `Interview #${conversation.conversation_id}`;
+}
+
+function conversationMeta(conversation) {
+    const topic = conversation.interview_mode ? topicLabel(conversation.interview_mode) : "Conversation";
+    return `${topic} · ${longDate(conversation.creation_date)}`;
+}
+
+const interviewCount = document.querySelector("#interviewCount");
+const interviewLatest = document.querySelector("#interviewLatest");
+
+// Newest first, like "Your Stories" (the server lists them oldest first).
 function renderConversationList() {
+    const conversations = [...testState.conversations].reverse();
     testConversationList.innerHTML = "";
-    for (const conversation of testState.conversations) {
-        const item = document.createElement("li");
-        item.className = "testConversationItem";
-        item.classList.toggle("selected", conversation.conversation_id === testState.selectedConversationId);
-        item.textContent = conversationLabel(conversation);
-        item.addEventListener("click", () => selectTestConversation(conversation.conversation_id));
-        testConversationList.appendChild(item);
+    for (const conversation of conversations) {
+        testConversationList.appendChild(
+            drawerItem({
+                title: conversationTitle(conversation),
+                meta: conversationMeta(conversation),
+                selected: conversation.conversation_id === testState.selectedConversationId,
+                onOpen: () => selectTestConversation(conversation.conversation_id),
+            })
+        );
     }
+    interviewCount.textContent = conversations.length;
+    interviewLatest.textContent = conversations.length ? conversationTitle(conversations[0]) : "None yet";
 }
 
 async function refreshTestConversations() {
@@ -120,6 +175,8 @@ async function refreshTestConversations() {
         testState.conversations = [];
     }
     renderConversationList();
+    // Story topics come from their interviews (stories.js, loaded after this).
+    if (typeof renderMyStoryDrawer === "function") renderMyStoryDrawer();
 }
 
 // keepVoice: redrawing the conversation that is already open (after a skip)
@@ -131,6 +188,7 @@ async function selectTestConversation(conversationId, { keepVoice = false } = {}
     testState.selectedConversationId = conversationId;
     renderConversationList();
     testEmptyState.classList.add("hidden");
+    closeStoryReader();
     testConversationPanel.classList.remove("hidden");
     try {
         renderTestMessages(selectedConversation(), await storageApi.getPrompts(conversationId));
@@ -183,6 +241,8 @@ newTestConversationBtn.addEventListener("click", async () => {
     }
     await refreshTestConversations();
     await selectTestConversation(conversationId);
+    // The "Answer mode" picker decides how this interview is answered.
+    setHandsFree(answerModeSelect.value === "handsFree");
 
     try {
         const { question } = await withInterviewer(conversationId, () =>
@@ -190,7 +250,12 @@ newTestConversationBtn.addEventListener("click", async () => {
         );
         // The mode and opening question now live on the conversation.
         await refreshTestConversations();
-        if (stillSelected(conversationId)) showQuestion(question);
+        if (stillSelected(conversationId)) {
+            showQuestion(question);
+            // The mic waits out the question being read aloud (see speaker).
+            if (answerModeSelect.value !== "type") startMicrophone();
+            else testMessageInput.focus();
+        }
     } catch (err) {
         if (sessionExpired(err)) return;
         if (stillSelected(conversationId)) {
@@ -296,6 +361,44 @@ writeStoryBtn.addEventListener("click", async () => {
 
 let handsFree = false;
 
+function setHandsFree(on) {
+    handsFree = Boolean(on && dictation);
+    handsFreeBtn.textContent = handsFree ? "✋ Hands-free on" : "✋ Hands-free off";
+    handsFreeBtn.classList.toggle("off", !handsFree);
+    handsFreeBtn.setAttribute("aria-pressed", String(handsFree));
+    renderMicHint();
+}
+
+// ---- Answer mode (the Story Companion card) ----
+
+// Remembered on this device, like the voice toggle (voiceOutput.js).
+const ANSWER_MODE_KEY = "reellife_answer_mode";
+const answerModeSelect = document.querySelector("#answerModeSelect");
+
+function saveAnswerMode() {
+    try {
+        localStorage.setItem(ANSWER_MODE_KEY, answerModeSelect.value);
+    } catch (err) {
+        // Storage blocked (private mode): just don't remember it.
+    }
+}
+
+try {
+    const saved = localStorage.getItem(ANSWER_MODE_KEY);
+    if ([...answerModeSelect.options].some((option) => option.value === saved)) answerModeSelect.value = saved;
+} catch (err) {
+    // Keep the default.
+}
+
+answerModeSelect.addEventListener("change", () => {
+    saveAnswerMode();
+    // Switching to typing mid-interview turns the microphone off for it.
+    if (answerModeSelect.value === "type") {
+        setHandsFree(false);
+        dictation?.stop();
+    }
+});
+
 const MIC_PROBLEM_HINTS = {
     offline: "You're offline -- listening picks up again when you're back online.",
     "no-microphone": "No working microphone found. Check it's plugged in and not in use by another app.",
@@ -388,16 +491,19 @@ if (dictation) {
     });
 
     handsFreeBtn.addEventListener("click", () => {
-        handsFree = !handsFree;
-        handsFreeBtn.textContent = handsFree ? "✋ Hands-free on" : "✋ Hands-free off";
-        handsFreeBtn.classList.toggle("off", !handsFree);
-        handsFreeBtn.setAttribute("aria-pressed", String(handsFree));
+        setHandsFree(!handsFree);
         if (handsFree) startMicrophone();
-        renderMicHint();
+        // Keep the picker in step, so the next interview starts the same way.
+        if (handsFree) answerModeSelect.value = "handsFree";
+        else if (answerModeSelect.value === "handsFree") answerModeSelect.value = "speak";
+        saveAnswerMode();
     });
 } else {
     micBtn.classList.add("hidden");
     handsFreeBtn.classList.add("hidden");
+    // No speech recognition in this browser: typing is the only answer mode.
+    for (const option of answerModeSelect.options) option.disabled = option.value !== "type";
+    answerModeSelect.value = "type";
 }
 
 if (speaker) {

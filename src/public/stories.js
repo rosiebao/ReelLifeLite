@@ -25,6 +25,12 @@ const storyState = {
     publishingDraft: false,
     // The story open in the reader, so "Add friend" knows whose it is.
     readingStory: null,
+    // The signed-in user's own stories (newest first), for the Story tab's
+    // "Your Stories" drawer -- and so "Your Interviews" can title each
+    // interview after the story published from it.
+    myStories: [],
+    // The story open in the Story tab's reader (#storyReader).
+    tabReaderStory: null,
 };
 
 const publishModal = document.querySelector("#publishModal");
@@ -168,9 +174,139 @@ async function refreshMyStories() {
     } catch (err) {
         stories = [];
     }
+    storyState.myStories = stories;
     renderCards(myStoriesGrid, stories, "friendStory", { own: true });
     show(myStoriesEmpty, stories.length === 0);
+    // A story open in the Story tab's reader may have just been edited or
+    // unpublished: show the new version, or go back to the empty state.
+    const reading = storyState.tabReaderStory;
+    if (reading) {
+        if (stories.some((story) => story.story_id === reading.story_id)) {
+            openTabStoryReader(reading.story_id);
+        } else {
+            closeStoryReader();
+            if (testState.selectedConversationId === null) show(testEmptyState, true);
+        }
+    }
+    renderMyStoryDrawer();
+    // Interviews are titled after their stories (testChat.js).
+    renderConversationList();
 }
+
+// ---- The Story tab's "Your Stories" drawer and reader ----
+
+const myStoryList = document.querySelector("#myStoryList");
+const myStoryCount = document.querySelector("#myStoryCount");
+const myStoryLatest = document.querySelector("#myStoryLatest");
+const storyReader = document.querySelector("#storyReader");
+const storyReaderTopic = document.querySelector("#storyReaderTopic");
+const storyReaderTitle = document.querySelector("#storyReaderTitle");
+const storyReaderMeta = document.querySelector("#storyReaderMeta");
+const storyReaderContent = document.querySelector("#storyReaderContent");
+const storyReaderEditBtn = document.querySelector("#storyReaderEditBtn");
+
+// The interview a story came from, if it's still in the list.
+function storyConversation(story) {
+    return testState.conversations.find((c) => c.conversation_id === story.conversation_id) || null;
+}
+
+// "Life Period" etc. -- the topic of the interview it came from, else its
+// first tag, else nothing.
+function storyTopic(story) {
+    const conversation = storyConversation(story);
+    if (conversation?.interview_mode) return topicLabel(conversation.interview_mode);
+    return story.tags[0] || "";
+}
+
+function storyMeta(story) {
+    const topic = storyTopic(story);
+    return topic ? `${topic} · ${longDate(story.created_at)}` : longDate(story.created_at);
+}
+
+function renderMyStoryDrawer() {
+    const stories = storyState.myStories;
+    myStoryList.innerHTML = "";
+    for (const story of stories) {
+        myStoryList.appendChild(
+            drawerItem({
+                title: story.title,
+                meta: storyMeta(story),
+                selected: storyState.tabReaderStory?.story_id === story.story_id,
+                onOpen: () => openTabStoryReader(story.story_id),
+            })
+        );
+    }
+    myStoryCount.textContent = stories.length;
+    myStoryLatest.textContent = stories.length ? stories[0].title : "Nothing published yet";
+}
+
+// About 200 words a minute, and never "0 min".
+function readingMinutes(text) {
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
+    return Math.max(1, Math.round(words / 200));
+}
+
+// Paragraphs as <p>s, through textContent (see the note at the top).
+function renderParagraphs(container, text) {
+    container.innerHTML = "";
+    for (const paragraph of text.split(/\n{2,}/)) {
+        if (!paragraph.trim()) continue;
+        const block = document.createElement("p");
+        block.textContent = paragraph.trim();
+        container.appendChild(block);
+    }
+}
+
+// Opens one of your stories in the Story tab, in place of the interview.
+async function openTabStoryReader(storyId) {
+    let story;
+    try {
+        story = await storageApi.getStory(storyId);
+    } catch (err) {
+        alert(errorMessage(err));
+        return;
+    }
+
+    // Leaving the interview: stop listening and talking, as switching
+    // interviews does (testChat.js).
+    stopVoice({ discard: true });
+    testState.selectedConversationId = null;
+    renderConversationList();
+
+    storyState.tabReaderStory = story;
+    const topic = storyTopic(story);
+    storyReaderTopic.textContent = topic;
+    show(storyReaderTopic, Boolean(topic));
+    storyReaderTitle.textContent = story.title;
+    storyReaderMeta.textContent = `${longDate(story.created_at)} • ${readingMinutes(story.content)} min read`;
+    renderParagraphs(storyReaderContent, story.content);
+    // Editing goes through the publish dialog, which needs the interview.
+    show(storyReaderEditBtn, story.conversation_id !== null);
+
+    show(testEmptyState, false);
+    show(testConversationPanel, false);
+    show(storyReader, true);
+    storyReader.scrollTop = 0;
+    renderMyStoryDrawer();
+    // On a phone the drawer sits above the reader; fold it away to make room.
+    storyReader.closest(".testLayout").querySelectorAll(".storyDrawer").forEach((drawer) => {
+        drawer.open = false;
+    });
+}
+
+// Called by testChat.js when an interview opens in its place.
+function closeStoryReader() {
+    if (!storyState.tabReaderStory) return;
+    storyState.tabReaderStory = null;
+    show(storyReader, false);
+    renderMyStoryDrawer();
+}
+
+storyReaderEditBtn.addEventListener("click", () => {
+    const story = storyState.tabReaderStory;
+    if (story?.conversation_id === null || story?.conversation_id === undefined) return;
+    openPublishModal(story.conversation_id);
+});
 
 async function refreshFriendStories() {
     let stories = [];
