@@ -99,6 +99,37 @@ Object.keys(PAGE_SECTIONS).forEach((pageId) => {
 // footer's "Me" does -- #selfSection is where the account details live.
 $("#accountSettingsButton").click(() => showPage("self"));
 
+// ---- Phone menu ----
+
+// On phones the links sit in a drop-down behind the hamburger (style.css
+// hides #menuToggle on wider screens, where none of this has any effect).
+const siteHeader = document.querySelector("header");
+const menuToggle = document.querySelector("#menuToggle");
+
+function setMenuOpen(open) {
+    siteHeader.classList.toggle("menuOpen", open);
+    menuToggle.setAttribute("aria-expanded", String(open));
+    menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+}
+
+menuToggle.addEventListener("click", () => setMenuOpen(!siteHeader.classList.contains("menuOpen")));
+
+// Picking a page (or Profile / Log out) closes the menu behind it.
+document.querySelectorAll("#navMenu button").forEach((button) => {
+    button.addEventListener("click", () => setMenuOpen(false));
+});
+
+// So do Esc and a tap anywhere outside the bar.
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && siteHeader.classList.contains("menuOpen")) {
+        setMenuOpen(false);
+        menuToggle.focus();
+    }
+});
+document.addEventListener("click", (event) => {
+    if (!siteHeader.contains(event.target)) setMenuOpen(false);
+});
+
 // ---- Restoring on load ----
 
 // Only worth hiding anything if we're actually going to move the user: a
