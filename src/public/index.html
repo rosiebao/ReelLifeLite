@@ -5,9 +5,6 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta http-equiv="X-UA-Compatible" content="ie=edge" />
         <title>ReelLife</title>
-        <!-- Tab and home-screen icons, scaled down from Small_Logo.jpg. -->
-        <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
-        <link rel="apple-touch-icon" href="apple-touch-icon.png" />
         <link rel="stylesheet" href="style.css" />
         <!-- In <head> so authGuard.js can turn signed-out visitors away before
              the page renders; everything below the body uses storageApi too. -->
@@ -19,39 +16,6 @@
     <body>
         <div class="background"></div>
         <div class="wrapper">
-            <!-- Top navigation bar. The ids are what script.js wires each page
-                 to (PAGE_SECTIONS), so keep them when relabelling. Before
-                 <main> so it comes first for keyboard and screen-reader users;
-                 style.css highlights the link whose section is .active. -->
-            <header>
-                <div class="brand">
-                    <span class="brandMark"><img src="Small_Logo.jpg" alt="" /></span>
-                    <h1>Reel<span>Life</span></h1>
-                </div>
-                <!-- Phones only: opens #navMenu as a drop-down (script.js). -->
-                <button type="button" id="menuToggle" class="menuToggle" aria-label="Open menu"
-                    aria-expanded="false" aria-controls="navMenu">
-                    <span></span><span></span><span></span>
-                </button>
-                <!-- display: contents on wider screens, so the links and account
-                     buttons lay out in the bar as if this wrapper weren't here. -->
-                <div id="navMenu" class="navMenu">
-                    <nav aria-label="Main">
-                        <button type="button" class="button" id="story">Tell Your Story</button>
-                        <button type="button" class="button" id="history">My Stories</button>
-                        <button type="button" class="button" id="family">Family</button>
-                        <button type="button" class="button" id="friends">Friends</button>
-                        <button type="button" class="button" id="community">Community</button>
-                    </nav>
-                    <div class="navActions">
-                        <button type="button" class="avatarButton" id="self" title="Profile" aria-label="Profile">
-                            <img src="Me Icon.svg" alt="" />
-                            <span class="avatarLabel">Profile</span>
-                        </button>
-                        <button type="button" id="headerLogoutButton">Log out</button>
-                    </div>
-                </div>
-            </header>
             <main>
                 <section id="selfSection" class="inactive s1">
                     <div class="selfBackground sectbackground">
@@ -130,83 +94,26 @@
                     </div>
                 </section>
                 <section id="tellYourStorySection" class="active s3">
-<<<<<<< HEAD
                     <img src="Story.svg" alt="Friends" />
                     <div class="storyBackground sectbackground"></div>
                     <h3>Tell Your Story</h3>
-=======
-                    <!-- The top bar already says where you are; kept for screen readers. -->
-                    <h2 class="srOnly">Tell Your Story</h2>
->>>>>>> 1d2ca5f6c1f5c50f479c7e5280c93f3996d0a07d
                     <div class="testLayout">
                         <aside class="testSidebar">
-                            <!-- Starting an interview (testChat.js). The option values are
-                                 the interviewer's mode names (../interviewer.js MODES). -->
-                            <div class="companionCard">
-                                <h3>Your Story Companion</h3>
-                                <label class="interviewModeLabel">Story topic
-                                    <select id="interviewModeSelect">
-                                        <option value="Stages">Life Period</option>
-                                        <option value="People">Someone Who Mattered</option>
-                                        <option value="Moments">A Memorable Moment</option>
-                                        <option value="Lessons">Life Lessons</option>
-                                    </select>
-                                </label>
-                                <label class="interviewModeLabel">Answer mode
-                                    <select id="answerModeSelect">
-                                        <option value="speak">Speak (microphone)</option>
-                                        <option value="handsFree">Speak hands-free</option>
-                                        <option value="type">Type</option>
-                                    </select>
-                                </label>
-                                <button type="button" id="newTestConversationBtn">
-                                    <ion-icon id="startInterviewIcon" name="mic-outline" aria-hidden="true"></ion-icon>
-                                    Start interview
-                                </button>
-                            </div>
-                            <!-- Your published stories; picking one opens it in the reader
-                                 (stories.js). -->
-                            <details class="storyDrawer">
-                                <summary>
-                                    <ion-icon name="document-text-outline" class="drawerIcon" aria-hidden="true"></ion-icon>
-                                    <span class="drawerText">
-                                        <span class="drawerTitle">Your Stories (<span id="myStoryCount">0</span>)</span>
-                                        <span id="myStoryLatest" class="drawerSubtitle">Nothing published yet</span>
-                                    </span>
-                                    <ion-icon name="chevron-down-outline" class="drawerChevron" aria-hidden="true"></ion-icon>
-                                </summary>
-                                <ul id="myStoryList" class="drawerList"></ul>
-                            </details>
-                            <!-- Earlier interviews, to pick one back up (testChat.js). -->
-                            <details class="storyDrawer">
-                                <summary>
-                                    <ion-icon name="chatbubbles-outline" class="drawerIcon" aria-hidden="true"></ion-icon>
-                                    <span class="drawerText">
-                                        <span class="drawerTitle">Your Interviews (<span id="interviewCount">0</span>)</span>
-                                        <span id="interviewLatest" class="drawerSubtitle">None yet</span>
-                                    </span>
-                                    <ion-icon name="chevron-down-outline" class="drawerChevron" aria-hidden="true"></ion-icon>
-                                </summary>
-                                <ul id="testConversationList" class="drawerList"></ul>
-                            </details>
+                            <label class="interviewModeLabel">Interview mode
+                                <select id="interviewModeSelect">
+                                    <option value="Stages">Stages: a stage of your life</option>
+                                    <option value="People">People: someone who mattered</option>
+                                    <option value="Moments">Moments: a memorable moment</option>
+                                    <option value="Lessons">Lessons: what life taught you</option>
+                                </select>
+                            </label>
+                            <button id="newTestConversationBtn">+ New interview</button>
+                            <ul id="testConversationList" class="testConversationList"></ul>
                         </aside>
                         <div class="testMain">
                             <div id="testEmptyState" class="testEmptyState">
-                                Pick a story topic and start an interview, or open one of your stories.
+                                Pick an interview mode and start a new interview, or open an earlier one.
                             </div>
-                            <!-- One of your stories, opened from "Your Stories" (stories.js). -->
-                            <article id="storyReader" class="storyReader hidden">
-                                <p id="storyReaderTopic" class="storyReaderTopic"></p>
-                                <div class="storyReaderHeading">
-                                    <h3 id="storyReaderTitle"></h3>
-                                    <button type="button" id="storyReaderEditBtn" class="storyReaderEdit">
-                                        <ion-icon name="pencil-outline" aria-hidden="true"></ion-icon>
-                                        Edit story
-                                    </button>
-                                </div>
-                                <p id="storyReaderMeta" class="storyReaderMeta"></p>
-                                <div id="storyReaderContent" class="storyReaderContent"></div>
-                            </article>
                             <div id="testConversationPanel" class="testConversationPanel hidden">
                                 <div class="storyPublishBar">
                                     <span id="storyPublishStatus" class="storyPublishStatus">Not published</span>
@@ -286,7 +193,6 @@
                     </p>
                 </section>
             </main>
-<<<<<<< HEAD
             <header>
                 <input type="checkbox" id="naviconbox">
                 <label for="naviconbox" class="navicon">
@@ -305,8 +211,6 @@
                 </nav>
                 <button type="button" id="headerLogoutButton">Log out</button>
             </header>
-=======
->>>>>>> 1d2ca5f6c1f5c50f479c7e5280c93f3996d0a07d
         </div>
         <!-- Publish dialog (Story tab) and story reader (Friends/Community
              tabs). Both live outside <main> on purpose: script.js treats every
