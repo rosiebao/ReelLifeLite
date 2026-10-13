@@ -1,16 +1,21 @@
-[2026-09-12T18:29:36.172Z] USER: Test message number 0 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:36.198Z] AI: Interesting -- can you describe the place a bit more?
-[2026-09-12T18:29:36.432Z] USER: Test message number 1 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:36.447Z] AI: That's a great memory -- what happened next?
-[2026-09-12T18:29:36.696Z] USER: Test message number 2 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:36.713Z] AI: What do you remember most vividly about that moment?
-[2026-09-12T18:29:36.960Z] USER: Test message number 3 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:36.975Z] AI: Thanks for sharing! How did that make you feel at the time?
-[2026-09-12T18:29:37.216Z] USER: Test message number 4 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:37.234Z] AI: Interesting -- can you describe the place a bit more?
-[2026-09-12T18:29:37.479Z] USER: Test message number 5 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:37.496Z] AI: That's a great memory -- what happened next?
-[2026-09-12T18:29:37.739Z] USER: Test message number 6 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:37.753Z] AI: That's a great memory -- what happened next?
-[2026-09-12T18:29:38.002Z] USER: Test message number 7 to make the list overflow so the chat scrollbar can be checked.
-[2026-09-12T18:29:38.022Z] AI: What do you remember most vividly about that moment?
+[2026-10-13T04:18:46.073Z] AI: Which stage of your life would you like to talk about today?
+[2026-10-13T04:18:49.463Z] USER: shut up
+[2026-10-13T04:18:49.467Z] AI: Interesting -- can you describe the place a bit more?
+[2026-10-13T04:18:51.438Z] USER: shut up
+[2026-10-13T04:18:51.441Z] AI: I'd love to hear more about that. Who else was there?
+[2026-10-13T04:18:52.628Z] USER: shut up
+[2026-10-13T04:18:52.630Z] AI: Interesting -- can you describe the place a bit more?
+[2026-10-13T04:18:53.694Z] USER: shut up
+[2026-10-13T04:18:53.696Z] AI: Interesting -- can you describe the place a bit more?
+[2026-10-13T04:18:54.781Z] USER: get out
+[2026-10-13T04:18:54.784Z] AI: That's a great memory -- what happened next?
+[2026-10-13T04:18:56.631Z] USER: fuck you
+[2026-10-13T04:18:56.634Z] AI: That's a great memory -- what happened next?
+[2026-10-13T04:18:57.640Z] USER: get out
+[2026-10-13T04:18:57.643Z] AI: What do you remember most vividly about that moment?
+[2026-10-13T04:18:58.553Z] USER: get out
+[2026-10-13T04:18:58.555Z] AI: Thanks for sharing! How did that make you feel at the time?
+[2026-10-13T04:19:17.600Z] USER: ahh
+[2026-10-13T04:19:17.604Z] AI: That's a great memory -- what happened next?
+[2026-10-13T04:19:18.614Z] USER: stop
+[2026-10-13T04:19:18.618Z] AI: Interesting -- can you describe the place a bit more?

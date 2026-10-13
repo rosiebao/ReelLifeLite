@@ -18,7 +18,7 @@
         <div class="wrapper">
             <main>
                 <section id="selfSection" class="inactive s1">
-                    <div class="selfBackground">
+                    <div class="selfBackground sectbackground">
                         <h2 id="username">Me</h2>
                         <h3 id="email">Email</h3>
                     </div>
@@ -34,7 +34,7 @@
                 <section id="familySection" class="inactive s2">
                     <img src="Family.svg" alt="Family" />
                     <h3>Your Family Tree</h3>
-                    <div class="familyBackground"></div>
+                    <div class="familyBackground sectbackground"></div>
                     <div class="treeContainer">
                         <div class="familyTree">
                             <div class="familyTreeRow R1">
@@ -94,7 +94,9 @@
                     </div>
                 </section>
                 <section id="tellYourStorySection" class="active s3">
-                    <h2>Tell Your Story</h2>
+                    <img src="Story.svg" alt="Friends" />
+                    <div class="storyBackground sectbackground"></div>
+                    <h3>Tell Your Story</h3>
                     <div class="testLayout">
                         <aside class="testSidebar">
                             <label class="interviewModeLabel">Interview mode
@@ -140,7 +142,7 @@
                 </section>
                 <section id="friendsSection" class="inactive s4">
                     <img src="Friends.svg" alt="Friends" />
-                    <div class="friendsBackground"></div>
+                    <div class="friendsBackground sectbackground"></div>
                     <div class="peoplePanel">
                         <form id="friendSearchForm" class="friendSearchForm">
                             <input id="friendSearchInput" type="search" placeholder="Find people by username" />
@@ -171,7 +173,7 @@
                 </section>
                 <section id="communitySection" class="inactive s5">
                     <img src="Community.svg" alt="Community" />
-                    <div class="communityBackground"></div>
+                    <div class="communityBackground sectbackground"></div>
                     <h2>Featured</h3>
                     <div id="featuredStory" class="hidden"></div>
                     <p id="communityFeaturedEmpty" class="feedEmpty">
@@ -182,9 +184,9 @@
                     <p id="communityStoriesEmpty" class="feedEmpty hidden">Nothing else published yet.</p>
                 </section>
                 <section id="historySection" class="inactive s6">
-                    <div class="historyBackground"></div>
-                    <h2>Story History</h2>
-                    <p class="historyIntro">Every story "Write my story" has written for you, newest first.</p>
+                    <img src="Story.svg" alt="Friends" />
+                    <div class="historyBackground sectbackground"></div>
+                    <h3>Every story "Write my story" has written for you, newest first.</h3>
                     <ul id="historyList" class="historyList"></ul>
                     <p id="historyEmpty" class="feedEmpty">
                         Nothing here yet. Answer a few questions in the Story tab and press "Write my story".
@@ -192,6 +194,12 @@
                 </section>
             </main>
             <header>
+                <input type="checkbox" id="naviconbox">
+                <label for="naviconbox" class="navicon">
+                    <div class="bar1"></div>
+                    <div class="bar2"></div>
+                    <div class="bar3"></div>
+                </label>
                 <h1>ReelLife</h1>
                 <nav>
                     <div class="button" id="self"><img src="Me Icon.svg" />Me</div>

@@ -388,8 +388,9 @@ main > section#selfSection h2 {
 #tellYourStorySection {
     display: flex;
     flex-direction: column;
-    height: calc(95vh - 10vh - 8vmin);
+    min-height: 100vh;
     overflow: hidden;
+    padding-top: 3vh;
 }
 .testLayout {
     flex: 1;
@@ -440,7 +441,6 @@ main > section#selfSection h2 {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    backdrop-filter: blur(5px);
 }
 .testEmptyState {
     flex: 1;
@@ -891,8 +891,8 @@ body.restoringPage main > section {
     position: absolute;
     z-index: -999;
     width: 80vw;
-    height: 91vh;
-    top: 9vh;
+    height: 90vh;
+    top: 10vh;
     right: 0;
     background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
 }
@@ -924,15 +924,10 @@ body.restoringPage main > section {
     position: absolute;
     z-index: -999;
     width: 80vw;
-    height: 91vh;
-    top: 9vh;
+    height: 90vh;
+    top: 10vh;
     right: 0;
     background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
-}
-.historyIntro {
-    margin: 1vh 0 2vh;
-    color: #555555;
-    text-align: center;
 }
 .historyList {
     list-style: none;
@@ -988,4 +983,126 @@ main > section .historyItem h3 {
 }
 .historyActions .dangerButton {
     background-color: #ffcfcf;
+}
+#historySection > img {
+    display: block;
+    height: 5vh;
+    margin: 0 auto;
+}
+#historySection > h3 {
+    font-style: italic;
+    color: #5e180c;
+    font-size: min(1.2em, 1.5vh);
+}
+#tellYourStorySection > img {
+    display: block;
+    height: 5vh;
+    margin: 0 auto;
+}
+#tellYourStorySection > h3 {
+    font-style: italic;
+    color: #5e180c;
+    font-size: min(1.2em, 1.5vh);
+}
+.storyBackground {
+    position: absolute;
+    z-index: -999;
+    width: 80vw;
+    height: 100%;
+    top: 10vh;
+    right: 0;
+    background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
+}
+.navicon {
+    display: none;
+}
+#naviconbox {
+    display: none;
+}
+@media screen and (max-width: 480px) {
+    #headerLogoutButton {
+        position: absolute;
+        top: 1vmin;
+        left: 1vmin;
+    }
+    header {
+        width: 100vw;
+        height: 10vh;
+    }
+    nav {
+        position: absolute;
+        top: -100vh;
+        transition: all 0.8s ease-in-out;
+        opacity: 0;
+        background-color: #f4f1ec;
+        width: 50vw;
+        right: 0;
+    }
+    main > section {
+        top: 10vh;
+        width: 100vw;
+        min-height: 90vh;
+    }
+    .sectbackground {
+        width: 100vw;
+        left: 0;
+        min-height: min(100%, 80vh);
+    }
+    .active {
+        left: 0;
+    }
+    .inactive {
+        left: -50vw;    
+    }
+    .navicon {
+        display: block;
+        position: absolute;
+        top: 1vmin;
+        right: 1vmin;
+        width: 8vmin;
+        height: 8vmin;
+        cursor: pointer;
+    }
+    .bar1 {
+        position: relative;
+        top: 0;
+        width: 8vmin;
+        height: 2vmin;
+        background-color: #000;
+        border-radius: 2vmin;
+        transition: all 0.3s ease-in-out;
+    }
+    .bar2 {
+        position: relative;
+        top: 1vmin;
+        width: 8vmin;
+        height: 2vmin;
+        background-color: #000;
+        border-radius: 2vmin;
+        transition: all 0.3s ease-in-out;
+    }
+    .bar3 {
+        position: relative;
+        top: 2vmin;
+        width: 8vmin;
+        height: 2vmin;
+        background-color: #000;
+        border-radius: 2vmin;
+        transition: all 0.3s ease-in-out;
+    }
+    #naviconbox:checked ~ .navicon .bar1 {
+        top: 2vmin;
+        transform: rotate(45deg);
+    }
+    #naviconbox:checked ~ .navicon .bar2 {
+        opacity: 0;
+    }
+    #naviconbox:checked ~ .navicon .bar3 {
+        top: -2vmin;
+        transform: rotate(-45deg);
+    }
+    #naviconbox:checked ~ nav {
+        top: 10vh;
+        opacity: 1;
+    }
 }
