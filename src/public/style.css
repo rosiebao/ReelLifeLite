@@ -1126,4 +1126,10 @@ main > section .historyItem h3 {
         position: relative;
         top: 50vw;
     }
+    .familyMemberName {
+        font-size: 0.8rem;
+    }
+    .familyTreeRow {
+        margin-top: 3.5vh;
+    }
 }
