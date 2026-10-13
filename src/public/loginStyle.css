@@ -1,22 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
-
-/* Login / sign-up page (login.html).
-   Desktop (>= 768px): a two-column card -- the logo on a navy panel on the
-   left, the form on the right.
-   Phone (< 768px): see the media query at the bottom. */
-
-:root {
-    --navy: #0a1936;          /* matches the logo's own background */
-    --navy-hover: #15295a;
-    --gold: #e8a33d;
-    --cream: #f7f4ef;
-    --card: #ffffff;
-    --line: #d9dde5;
-    --text: #0a1936;
-    --muted: #5b6577;
-    --error: #c0392b;
-}
-
+@import url('https://fonts.googleapis.com/css2?family=Crafty+Girls&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap');
 ::selection {
     color: #ffffff;
     background-color: #000000;
@@ -25,280 +8,189 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-}
-body {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4vh 4vw;
     font-family: Lato, sans-serif;
-    color: var(--text);
+    font-weight: 400;
+    overflow-x: hidden;
+}
+h1 {
+    color: #00000000;
+    background-image: url("ReelLife\ Logo.svg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    margin-top: 5vh;
+    height: 3em;
+    text-align: center;
+    cursor: default;
+    user-select: none;
+}
+h2 {
+    font-weight: 600;
+}
+.loginBox {
+    position: absolute;
+    top: 20vh;
+    left: 10vw;
+    height: 60vh;
+    width: 80vw;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 40vw 40vw;
+    align-items: center;
+    background-color: #f4f1ec;
+    border-radius: 40px;
+}
+.login {
+    margin-left: 40px;
+}
+a {
+    color: #000000;
+}
+input, input:autofill, input:-internal-autofill-selected {
+    display: block;
+    width: 80%;
+    padding: 2%;
+    border-radius: 10px;
+    border: 2px solid #888a7c;
+    background-color: #f4f1ec !important;
+}
+input:-internal-autofill-selected {
+  transition: background-color 0s 999999999999s, color 0s 999999999999s !important;
+}
+textarea {
+    background-color: #f4f1ec !important;
+}
+#signInButton {
+    width: 10vw;
+    text-align: center;
+    box-sizing: content-box;
+    padding: 10px;
+    border-radius: 10px;
+    margin: 1.2em auto 0;
+    cursor: pointer;
+    border: 2px solid #484a3c;
+    color: #484a3c;
+}
+#signInButton:hover {
+    border-color: #686a5c;
+    color: #686a5c;
+}
+#signInButton:active {
+    border-color: #888a7c;
+    color: #888a7c;
+}
+.hidden {
+    display: none;
+}
+.error {
+    color: #ff4040;
+    text-align: center;
+    min-height: 1.2em;
+}
+.hint {
+    font-size: 0.8em;
+    color: #404040;
+    text-align: center;
 }
 .background {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
     background-image: url('Background Image.png');
     background-size: cover;
     background-position: center;
     z-index: -100;
 }
-.hidden {
-    display: none !important;
+p {
+    margin-top: 1.2em;
 }
-
-/* ---- The card ---- */
-.authCard {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    width: min(960px, 100%);
-    min-height: min(600px, 92vh);
-    border-radius: 18px;
-    overflow: hidden;
-    background-color: var(--cream);
-    box-shadow: 0 20px 50px rgba(10, 25, 54, 0.25);
-}
-
-/* Left: the logo, centred on navy so the poster's edges disappear into it. */
-.brandPanel {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background-color: var(--navy);
-}
-.brandPanel img {
-    display: block;
-    width: 100%;
-    max-width: 440px;
-    max-height: 100%;
-    object-fit: contain;
-    /* Trims the light corner pixels baked into the JPG. */
-    border-radius: 14px;
-}
-
-/* Right: heading + the white form card. */
-.formPanel {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 48px 40px;
-}
-.accent {
-    display: block;
-    width: 40px;
-    height: 4px;
-    border-radius: 2px;
-    background-color: var(--gold);
-    margin-bottom: 18px;
-}
-h1 {
-    font-size: 2.4rem;
-    font-weight: 900;
-    line-height: 1.1;
-}
-.subtitle {
-    margin-top: 10px;
-    font-size: 1.15rem;
-    line-height: 1.4;
-    color: var(--muted);
-}
-
-.formCard {
-    margin-top: 24px;
-    padding: 24px;
-    border-radius: 12px;
-    background-color: var(--card);
-    box-shadow: 0 2px 10px rgba(10, 25, 54, 0.06);
-}
-.field + .field {
-    margin-top: 16px;
-}
-label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
-    font-weight: 700;
-}
-input {
-    display: block;
-    width: 100%;
-    padding: 10px 12px;
-    font: inherit;
-    font-size: 1rem;    /* 16px stops iOS zooming in on focus */
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background-color: #ffffff;
-}
-input::placeholder {
-    color: #a0a7b4;
-}
-input:focus {
-    outline: none;
-    border-color: var(--navy);
-    box-shadow: 0 0 0 3px rgba(10, 25, 54, 0.12);
-}
-
-.passwordWrap {
-    position: relative;
-}
-.passwordWrap input {
-    padding-right: 44px;
-}
-.eyeButton {
-    position: absolute;
-    top: 50%;
-    right: 6px;
-    transform: translateY(-50%);
-    display: flex;
-    padding: 6px;
-    border: none;
-    border-radius: 6px;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-}
-.eyeButton:hover,
-.eyeButton[aria-pressed="true"] {
-    color: var(--navy);
-}
-.eyeButton:focus-visible {
-    outline: 2px solid var(--navy);
-}
-
-.hint {
-    margin-top: 6px;
-    font-size: 0.8rem;
-    color: var(--muted);
-}
-.error {
-    min-height: 1.2em;
-    margin-top: 12px;
-    font-size: 0.9rem;
-    color: var(--error);
+.toSignIn {
+    height: calc(60vh - 60px);
+    margin: 30px 0 30px 30px;
+    background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
+    padding: 10vh 0;
     text-align: center;
 }
-
-#signInButton {
-    display: block;
-    width: 100%;
-    margin-top: 8px;
-    padding: 12px;
-    font: inherit;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    background-color: var(--navy);
-    cursor: pointer;
+.toSignIn h2 {
+    margin-top: 4vh;
 }
-#signInButton:hover {
-    background-color: var(--navy-hover);
-}
-#signInButton:focus-visible {
-    outline: 3px solid var(--gold);
-    outline-offset: 2px;
-}
-#signInButton:disabled {
-    opacity: 0.6;
-    cursor: wait;
-}
-
-.divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 18px 0 12px;
-    font-size: 0.85rem;
-    color: var(--muted);
-}
-.divider::before,
-.divider::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background-color: var(--line);
-}
-
-.switchMode {
-    font-size: 0.95rem;
-    line-height: 1.6;
-    text-align: center;
-    color: var(--muted);
+.toSignIn p {
+    margin-top: 1.5em;
 }
 #toggleMode {
-    font-weight: 700;
-    color: var(--navy);
+    text-decoration: none;
+    font-size: 1.2em;
+    font-weight: 600;
+    display: inline-block;
+    margin-top: 1em;
+    padding: 2vh 5vw;
+    border-radius: 0.5em;
+    border: 2px solid #000000;
 }
 #toggleMode:hover {
-    color: var(--navy-hover);
+    border-color: #404040;
+    color: #404040;
 }
-
-/* ---- Phone ---- */
-/* One column, following the phone mockup: a floating rounded card with the
-   logo as a full-width banner across its top and the form directly beneath
-   it on the cream card (no inner white box). */
-@media (max-width: 767px) {
-    body {
-        align-items: flex-start;
-        padding: 16px;
+#toggleMode:active {
+    border-color: #606060;
+    color: #606060;
+}
+#usernameField:not(.hidden) p, #usernameField:not(.hidden) ~ p {
+    margin-top: 0.4em;
+}
+#usernameField:not(.hidden) ~ #signInButton {
+    margin-top: 0.8em;
+}
+.login p {
+    color: #888a7c;
+}
+.toSignInMobile {
+    display: none;
+}
+@media screen and (max-width: 480px) {
+    .loginBox {
+        position: absolute;
+        display: block;
+        height: 80vh;
+        width: 100vw;
+        padding: 40px;
+        bottom: 0;
+        left: 0;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
     }
-    .authCard {
-        grid-template-columns: minmax(0, 1fr);
-        width: min(440px, 100%);
-        min-height: 0;
-        border-radius: 14px;
-        box-shadow: 0 10px 30px rgba(10, 25, 54, 0.22);
+    .toSignIn {
+        display: none;
     }
-    /* The whole logo (reel, wordmark and tagline) stays visible, letterboxed
-       on navy so the banner blends into the poster's own background. */
-    .brandPanel {
-        padding: 12px 16px 8px;
+    .login {
+        height: calc(55vh - 10px);
+        padding: 0;
+        margin: 0;
     }
-    .brandPanel img {
-        width: auto;
-        max-width: 100%;
-        height: min(240px, 30vh);
-        max-height: none;
-        object-fit: contain;
-        border-radius: 8px;
+    #signInButton {
+        width: 40vw;
     }
-    .formPanel {
-        justify-content: flex-start;
-        padding: 24px 20px 24px;
+    .toSignInMobile {
+        display: block;
     }
-    .accent {
-        width: 32px;
-        margin-bottom: 14px;
+    .mobileRedirectQ {
+        font-weight: 600;
+        color: #484a3c
+    }
+    #signInButton {
+        border-radius: 20px;
+        background-color: #5e180c;
+        border: none;
+        color: #fff;
+    }
+    #mobileToggleMode {
+        font-weight: 600;
+        color: #5e180c;
+        text-decoration: none;
     }
     h1 {
-        font-size: 1.75rem;
-    }
-    .subtitle {
-        margin-top: 6px;
-        font-size: 1rem;
-    }
-    .formCard {
-        margin-top: 18px;
-        padding: 0;
-        background: none;
-        box-shadow: none;
-    }
-    .field + .field {
-        margin-top: 14px;
-    }
-    /* Bigger touch targets. */
-    input,
-    #signInButton {
-        padding-top: 12px;
-        padding-bottom: 12px;
-    }
-    .divider {
-        margin: 16px 0 10px;
-    }
-    #toggleMode {
-        text-decoration: underline;
+        height: 2em;
     }
 }
