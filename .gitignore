@@ -3,6 +3,5 @@ config.json
 .env
 *.log
 .DS_Store
-src/frontend/conversation_files/
-src/frontend/app.db
+src/conversation_files/
 src/app.db
