@@ -1,7 +1,12 @@
+// the big importation of 2026?
 const express = require("express");
 const { db } = require("./db");
 const { ApiError } = require("./errors");
-const { hashPassword, verifyPassword, generateSessionToken, sessionExpiry } = require("./security");
+const { hashPassword,
+        verifyPassword,
+        generateSessionToken,
+        sessionExpiry
+        } = require("./security");
 
 const router = express.Router();
 

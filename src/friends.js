@@ -7,6 +7,8 @@
 // are the two places that do it, and everything else goes through them.
 
 // claude slave!11
+// lowkey merged all of this with ai because we were running out of time
+// yes this is for the judges to see
 
 const express = require("express");
 const { db } = require("./db");

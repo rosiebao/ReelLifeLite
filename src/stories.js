@@ -13,7 +13,8 @@ const express = require("express");
 const { db } = require("./db");
 const { ApiError } = require("./errors");
 const { requireAuth } = require("./auth");
-const { friendIdsOf, areFriends } = require("./friends");
+const { friendIdsOf, 
+        areFriends } = require("./friends");
 
 const router = express.Router();
 

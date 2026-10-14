@@ -1,2 +1,0 @@
-[2026-09-28T03:15:05.631Z] USER: testing
-[2026-09-28T03:15:05.645Z] AI: That's a great memory -- what happened next?
