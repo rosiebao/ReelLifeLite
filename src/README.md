@@ -32,7 +32,7 @@ app.js            Express app: JSON body parsing, static files, the two
                    routers below, error-handling middleware
 auth.js           /signup /login /logout /whoami + the requireAuth middleware
 conversations.js  /conversations, /prompts
-drafts.js         /drafts -- the History tab: every "Write my story" draft
+drafts.js         /drafts -- every story written when an interview ends ("End")
 interview.js      /conversations/{id}/interview/* -- the Story tab's interview
 interviewer.js    what the interviewer says: Claude on AWS Bedrock, or canned
                    questions when that isn't switched on
@@ -72,15 +72,16 @@ can also go in `frontend/.env` (see `.env.example`), which `npm start` reads.
 | `MEDIA_ROOT` | `./conversation_files` | Where transcripts/media attachments are written |
 | `INTERVIEW_AI` | *(unset)* | `bedrock` to have Claude run the Story tab's interview; anything else uses canned questions |
 | `INTERVIEW_MODEL` | `anthropic.claude-opus-5` | Bedrock model ID for the interviewer |
-| `AWS_REGION` | -- | Bedrock region, e.g. `us-east-1` (only with `INTERVIEW_AI=bedrock`) |
+| `INTERVIEW_AWS_REGION` | `AWS_REGION` | Bedrock region for the interviewer, e.g. `us-east-1`. Wins over `AWS_REGION`, which a shell often sets for something else; a 404 "model does not exist" usually means the model isn't served in that region |
+| `AWS_REGION` | -- | Bedrock region when `INTERVIEW_AWS_REGION` isn't set (only with `INTERVIEW_AI=bedrock`) |
 
 ### Turning on the AI interviewer
 
 The interview came over from the ReelLife repo (`src/server/server.js`,
 `src/js/interview.js`), which called Claude through AWS Bedrock. It still
 does, via Anthropic's `@anthropic-ai/bedrock-sdk`, but only when switched on
--- otherwise the interviewer asks from a short canned list and "Write my
-story" just gathers your answers, so the app runs for anyone without AWS
+-- otherwise the interviewer asks from a short canned list and "End" just
+gathers your answers into the story, so the app runs for anyone without AWS
 access.
 
 To switch it on for every `npm start`, do this once:
@@ -153,13 +154,14 @@ question is `502` (or `503` if Bedrock is busy), and the answer is kept.
   with a different one; if the latest answer never got a question, asks it
 - `POST /conversations/{id}/interview/story` -> `{"story", "draft_id",
   "created_at"}`, a first-person draft of the interview for the publish
-  dialog. Each draft is kept in `story_drafts` for the History tab (below);
+  dialog. Each draft is also kept in `story_drafts` (see Drafts below);
   the story itself is only stored by publishing.
 
-### History
+### Drafts
 
-Every draft "Write my story" has written, so one can be reopened after the
-publish dialog is closed. Drafts are private and never edited.
+Every story written when an interview ends ("End"), kept server-side. Drafts
+are private and never edited. No page shows them any more (the "My Stories"
+tab was removed); the API stays so nothing already written is lost.
 
 - `GET /drafts` -- the caller's drafts, newest first: `draft_id`,
   `conversation_id`, `interview_mode`, `content`, `created_at`
@@ -222,9 +224,7 @@ the other side agrees. Declining deletes the row, so the pair can try again.
   session
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
   mode, start an interview, answer (typed or out loud), skip a question, and
-  "Write my story" into the publish dialog, all through `/interview`
-- `public/history.js` -- the History tab: every "Write my story" draft, each
-  of which can be reopened in the publish dialog or deleted, from `/drafts`
+  "End" to have it written up as a story in the publish dialog, all through `/interview`
 - `public/voiceInput.js` -- answering out loud with the browser's speech
   recognition (Chrome, Edge, Safari); dictates into the answer box with a live
   caption, and the mic button hides where it isn't supported. Restarts itself

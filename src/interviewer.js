@@ -12,11 +12,16 @@
 //
 // Bedrock credentials are whatever the AWS SDK finds: AWS_BEARER_TOKEN_BEDROCK,
 // AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY(/AWS_SESSION_TOKEN), or a profile in
-// ~/.aws. AWS_REGION picks the region.
+// ~/.aws. INTERVIEW_AWS_REGION picks the region, falling back to AWS_REGION /
+// AWS_DEFAULT_REGION. It's its own setting because the shell's AWS_REGION is
+// often set for something else, wins over .env, and not every region serves
+// every model (an account can get "model does not exist" in one region and
+// the same model fine in another).
 const { AnthropicBedrockMantle } = require("@anthropic-ai/bedrock-sdk");
 
 const USE_BEDROCK = process.env.INTERVIEW_AI === "bedrock";
 const MODEL = process.env.INTERVIEW_MODEL || "anthropic.claude-opus-5";
+const REGION = process.env.INTERVIEW_AWS_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
 
 // The interviewer's main idea and basically the starting phrase that it gives the user
 // all ai generated questions btw it knows best frfr
@@ -74,11 +79,28 @@ function interviewerSystemPrompt(mode) {
 }
 
 const STORY_SYSTEM_PROMPT =
-    "You are a memoir writer who turns interview transcripts into first-person stories, in the " +
-    "storyteller's own voice. Use only what the storyteller actually said: never invent names, dates, " +
-    "places or events, and leave out anything the interviewer asked that went unanswered. Organize it " +
-    "into flowing paragraphs, keeping their tone and the details they chose to share. Write plain text " +
-    "with a blank line between paragraphs -- no title, headings or markdown.";
+    "You are a memoir writer for ReelLife, an app where people record their life stories for their families " +
+    "and future generations. You turn an interview transcript into a first-person story, in the storyteller's " +
+    "own voice, and fill in the details of the publish form for it.\n\n" +
+    "Faithfulness comes first. Use only what the storyteller actually said: never invent names, dates, places, " +
+    "people or events, and leave out anything the interviewer asked that went unanswered. If they were vague, " +
+    "stay vague -- write \"the day before\", not a weekday they never named. Their answers may come from " +
+    "speech-to-text, so read past small transcription mistakes, but keep their words, tone and the details " +
+    "they chose to share. Organize it into flowing paragraphs that read like a memoir chapter.\n\n" +
+    "Reply with exactly these tags, in this order, and nothing outside them:\n" +
+    "<title>An evocative title, 3-8 words, no quotation marks or trailing punctuation.</title>\n" +
+    "<summary>One or two sentences, at most 300 characters, that would draw a family member in.</summary>\n" +
+    "<place>Where it happens, as the storyteller named it (\"Seattle\", \"rural Ohio\"). Empty if they never said.</place>\n" +
+    "<time_period>When it happens (\"the summer of 1985\", \"1950s-1960s\"). Resolve relative references " +
+    "(\"last summer\") against the recording date. Empty if they gave no time reference at all.</time_period>\n" +
+    "<tags>Up to 4 short, comma-separated topics (\"Family, Childhood, Food\").</tags>\n" +
+    "<story>The story itself: plain text with a blank line between paragraphs -- no title, headings or " +
+    "markdown.</story>";
+
+// The details the story comes with, as the publish form names them. Each is
+// trimmed to fit the form (see ./stories.js), so a long-winded reply can never
+// make publishing fail.
+const STORY_FIELDS = ["title", "summary", "place", "time_period", "tags", "story"];
 
 const KICKOFF = "Please ask me the first question to begin my story.";
 const SKIP_REQUEST = "I'd rather not answer that one. Could you ask me something different?";
@@ -86,7 +108,7 @@ const SKIP_REQUEST = "I'd rather not answer that one. Could you ask me something
 let client = null;
 
 function bedrockClient() {
-    if (!client) client = new AnthropicBedrockMantle();
+    if (!client) client = new AnthropicBedrockMantle(REGION ? { awsRegion: REGION } : {});
     return client;
 }
 
@@ -113,11 +135,10 @@ function describe() {
     if (!USE_BEDROCK) {
         return "Interview AI: off, using canned questions (set INTERVIEW_AI=bedrock in .env to use Claude)";
     }
-    const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
-    if (!region) {
-        return "Interview AI: WARNING -- INTERVIEW_AI=bedrock but no AWS_REGION is set, so every question will fail";
+    if (!REGION) {
+        return "Interview AI: WARNING -- INTERVIEW_AI=bedrock but no INTERVIEW_AWS_REGION or AWS_REGION is set, so every question will fail";
     }
-    return `Interview AI: Claude (${MODEL}) on AWS Bedrock in ${region}`;
+    return `Interview AI: Claude (${MODEL}) on AWS Bedrock in ${REGION}`;
 }
 
 function parseMode(value) {
@@ -164,11 +185,22 @@ async function callClaude({ system, messages, effort }) {
             err instanceof AnthropicBedrockMantle.RateLimitError ||
             err instanceof AnthropicBedrockMantle.InternalServerError ||
             err instanceof AnthropicBedrockMantle.APIConnectionError;
-        throw new InterviewerError(`Bedrock request failed: ${err.message}`, { retryable, cause: err });
+        // The usual setup mistake, so the log says how to fix it.
+        const hint =
+            err.status === 404
+                ? ` -- ${MODEL} isn't available to this account in ${REGION}; set INTERVIEW_AWS_REGION ` +
+                  "(e.g. us-east-1) or INTERVIEW_MODEL in .env"
+                : "";
+        throw new InterviewerError(`Bedrock request failed: ${err.message}${hint}`, { retryable, cause: err });
     }
 
     if (response.stop_reason === "refusal") {
         throw new InterviewerError("Claude declined to respond to this interview");
+    }
+    // Cut off mid-reply: for a story that means a missing ending, so it's a
+    // failure rather than something to hand the storyteller as finished.
+    if (response.stop_reason === "max_tokens") {
+        throw new InterviewerError("Claude ran out of room before finishing");
     }
     const text = response.content
         .filter((block) => block.type === "text")
@@ -210,25 +242,79 @@ async function replacementQuestion(mode, openingQuestion, prompts, skipped) {
     ]);
 }
 
-async function draftStory(openingQuestion, prompts) {
+// "Tuesday, June 18, 2026" -- given to Claude so it can place "yesterday" or
+// "last summer", never to put a date in the story the storyteller didn't give.
+function recordingDate(recordedAt) {
+    const date = new Date(recordedAt);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        timeZone: "UTC",
+    });
+}
+
+// Pulls the tagged fields out of Claude's reply. Missing or empty fields come
+// back as "", and if the <story> tag itself went missing the whole reply,
+// minus any tags, is taken as the story rather than losing it.
+function parseStoryReply(text) {
+    const field = (name) => {
+        const match = text.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, "i"));
+        return match ? match[1].trim() : "";
+    };
+    const details = Object.fromEntries(STORY_FIELDS.map((name) => [name, field(name)]));
+    if (!details.story && !/<story>/i.test(text)) {
+        details.story = text.replace(/<(\w+)>[\s\S]*?<\/\1>/g, "").trim();
+    }
+    if (!details.story) throw new InterviewerError("Claude's reply had no story in it");
+    details.tags = details.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    return details;
+}
+
+// The finished interview as a story plus the details for the publish form:
+// { story, title, summary, place, time_period, tags, ai }. `ai` says whether
+// Claude wrote it. Without Claude the story is just the storyteller's own
+// answers and the details are left for them -- said loudly in the log, since
+// from the outside it looks like the story was written.
+// `recordedAt` (the conversation's creation date) and `mode` give Claude the
+// context the transcript alone doesn't have.
+async function draftStory(openingQuestion, prompts, { recordedAt, mode } = {}) {
     if (!isBedrockEnabled()) {
-        return prompts
+        console.warn(
+            "Interview AI is off (INTERVIEW_AI isn't \"bedrock\"), so the story is just the answers joined " +
+                "together -- see .env.example to switch Claude on"
+        );
+        const story = prompts
             .map((prompt) => prompt.content.trim())
             .filter(Boolean)
             .join("\n\n");
+        return { story, title: "", summary: "", place: "", time_period: "", tags: [], ai: false };
     }
-    return callClaude({
+
+    const context = [];
+    const recorded = recordedAt && recordingDate(recordedAt);
+    if (recorded) context.push(`This interview was recorded on ${recorded}.`);
+    if (mode && MODES[mode]) context.push(`Interview topic: ${MODES[mode].focus}`);
+
+    const text = await callClaude({
         system: STORY_SYSTEM_PROMPT,
         messages: [
             {
                 role: "user",
                 content:
+                    (context.length ? context.join("\n") + "\n\n" : "") +
                     "Here is the interview transcript. Write the story now.\n\n<transcript>\n" +
                     interviewTranscript(openingQuestion, prompts) +
                     "\n</transcript>",
             },
         ],
     });
+    return { ...parseStoryReply(text), ai: true };
 }
 
 module.exports = {
@@ -243,5 +329,6 @@ module.exports = {
     nextQuestion,
     replacementQuestion,
     draftStory,
+    parseStoryReply,
     setClientForTests,
 };

@@ -139,7 +139,6 @@ nav .button:focus-visible,
 /* Highlight whichever page is showing. script.js only toggles .active on the
    sections, so the bar follows along without any extra bookkeeping. */
 body:has(#tellYourStorySection.active) #story,
-body:has(#historySection.active) #history,
 body:has(#familySection.active) #family,
 body:has(#friendsSection.active) #friends,
 body:has(#communitySection.active) #community {
@@ -147,7 +146,6 @@ body:has(#communitySection.active) #community {
     font-weight: 700;
 }
 body:has(#tellYourStorySection.active) #story::after,
-body:has(#historySection.active) #history::after,
 body:has(#familySection.active) #family::after,
 body:has(#friendsSection.active) #friends::after,
 body:has(#communitySection.active) #community::after {
@@ -850,16 +848,6 @@ body.restoringPage main > section {
     color: #2b7a2b;
     font-weight: 700;
 }
-#publishStoryBtn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 10px;
-    background-color: #bfffbf;
-    cursor: pointer;
-}
-#publishStoryBtn:hover {
-    background-color: #a0ffa0;
-}
 
 /* ---- Interviewing (Story tab) ---- */
 .interviewModeLabel {
@@ -879,15 +867,18 @@ body.restoringPage main > section {
     color: var(--navy);
     background-color: #ffffff;
 }
-#writeStoryBtn {
-    padding: 8px 16px;
-    border: 1px solid #bfffbf;
+/* "End": finishes the interview and writes the story (as on the original interview page). */
+.endButton {
+    padding: 8px 12px;
+    border: none;
     border-radius: 10px;
-    background-color: #ffffff;
+    background: none;
+    color: #ef4444;
+    font-weight: 600;
     cursor: pointer;
 }
-#writeStoryBtn:hover {
-    background-color: #efffef;
+.endButton:hover {
+    background-color: #fef2f2;
 }
 .messageActions {
     display: flex;
@@ -931,6 +922,22 @@ body.restoringPage main > section {
 .message-assistant.pending {
     color: #888888;
     letter-spacing: 2px;
+}
+/* "Writing your story…" while Claude drafts it -- a sentence, not dots. */
+.message-assistant.pending.writing {
+    letter-spacing: normal;
+    font-style: italic;
+    animation: writingPulse 1.6s ease-in-out infinite;
+}
+@keyframes writingPulse {
+    50% {
+        opacity: 0.55;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .message-assistant.pending.writing {
+        animation: none;
+    }
 }
 /* Voice: the interviewer reads questions aloud and can listen hands-free. */
 .voiceToggle {
@@ -1213,83 +1220,9 @@ body.restoringPage main > section {
 #communitySection {
     padding-top: 3vh;
 }
-/* ---- History tab: every story "Write my story" has written ---- */
-#historySection {
-    padding-top: 3vh;
-}
-.historyBackground {
-    position: absolute;
-    z-index: -999;
-    top: 9vh;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
-}
-.historyIntro {
-    margin: 1vh 0 2vh;
-    color: #555555;
-    text-align: center;
-}
-.historyList {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 2vh;
-    margin: 0 5vw;
-}
-.historyItem {
-    padding: 2vmin 2.5vmin;
-    border-radius: 30px;
-    background-color: #ffffff88;
-    backdrop-filter: blur(10px);
-    box-shadow: 1px 3px 6px 2px #00000022;
-}
-main > section .historyItem h3 {
-    text-align: left;
-    font-size: 0.95em;
-    font-weight: 700;
-    color: #444444;
-    margin-bottom: 1vh;
-}
-.historyText {
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    line-height: 1.5;
-}
-.historyText.folded {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
-    overflow: hidden;
-}
-.historyActions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 1.5vh;
-}
-.historyActions button {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 10px;
-    background-color: #dfdfdf;
-    cursor: pointer;
-}
-.historyActions .primaryButton {
-    background-color: #bfffbf;
-}
-.historyActions button:hover {
-    filter: brightness(0.95);
-}
-.historyActions .dangerButton {
-    background-color: #ffcfcf;
-}
-
 /* ---- Top bar on smaller screens ---- */
 /* Laptop / tablet: tighten the spacing and shrink the links a little so all
-   five still fit on one line. */
+   four, plus Profile and Log out, still fit on one line. */
 @media (max-width: 1100px) {
     header {
         gap: 12px;
@@ -1409,7 +1342,6 @@ main > section .historyItem h3 {
         transform: scaleY(0);
     }
     body:has(#tellYourStorySection.active) #story::after,
-    body:has(#historySection.active) #history::after,
     body:has(#familySection.active) #family::after,
     body:has(#friendsSection.active) #friends::after,
     body:has(#communitySection.active) #community::after {

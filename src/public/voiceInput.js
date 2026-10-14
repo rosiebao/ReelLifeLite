@@ -30,6 +30,8 @@
     // may go unanswered before it is retried.
     const WATCHDOG_INTERVAL_MS = 4000;
     const START_STUCK_MS = 8000;
+    // finish() waits this long at most for Chrome to hand over the last words.
+    const FINISH_TIMEOUT_MS = 1500;
 
     const MESSAGES = {
         blocked: "Microphone access was blocked. Allow it in the browser's site settings to answer out loud.",
@@ -87,6 +89,8 @@
         let permissionGranted = false;
         let permissionRequest = null;
         let reportedError = null;
+        // finish() callers waiting for the session to close (see onend).
+        const endWaiters = [];
 
         function setState(next) {
             if (state === next) return;
@@ -274,6 +278,8 @@
             if (lastInterim && !suspended && !ignoreResults) onFinalText(lastInterim);
             lastInterim = "";
             onInterimText("");
+            // finish(): the last words are in, so whoever is waiting can go on.
+            for (const done of endWaiters.splice(0)) done();
             if (shouldListen()) scheduleRestart();
         };
 
@@ -389,6 +395,26 @@
                 }
                 setState("idle");
                 onListeningChange(false);
+            },
+
+            // Turns the mic off like stop(), but resolves once Chrome has handed
+            // over the last words it heard (they arrive through onFinalText) --
+            // or after FINISH_TIMEOUT_MS if it never reports back. For ending an
+            // interview mid-sentence without losing that sentence.
+            finish() {
+                const open = running || starting;
+                this.stop();
+                if (!open) return Promise.resolve();
+                return new Promise((resolve) => {
+                    const timer = setTimeout(done, FINISH_TIMEOUT_MS);
+                    function done() {
+                        clearTimeout(timer);
+                        const i = endWaiters.indexOf(done);
+                        if (i !== -1) endWaiters.splice(i, 1);
+                        resolve();
+                    }
+                    endWaiters.push(done);
+                });
             },
 
             // While a question is read aloud: stop listening without turning

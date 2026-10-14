@@ -13,10 +13,39 @@ const { requireAuth } = require("./auth");
 const { appendTranscript } = require("./storage");
 const { ownedConversation, promptsOf, insertPrompt, saveResponse } = require("./conversations");
 const interviewer = require("./interviewer");
+const { limits: storyLimits } = require("./stories");
 
 const router = express.Router();
 
 const MAX_ANSWER_LENGTH = 20000;
+
+// Cut to `max` characters, at a word break where there is one, so a drafted
+// field always fits the publish form.
+function fitText(value, max) {
+    const text = String(value ?? "").trim();
+    if (text.length <= max) return text;
+    const cut = text.slice(0, max);
+    const space = cut.lastIndexOf(" ");
+    return (space > max * 0.6 ? cut.slice(0, space) : cut).trim();
+}
+
+// What Claude drafted for the publish form, made safe to publish as-is: every
+// field within its limit, and tags the way ./stories.js stores them (no '#',
+// no commas, no repeats, at most MAX_TAGS).
+function storyDetails(drafted) {
+    const tags = [];
+    for (const raw of drafted.tags || []) {
+        const tag = String(raw).replace(/^#+/, "").replace(/,/g, " ").trim();
+        if (tag && tag.length <= storyLimits.tag && !tags.includes(tag)) tags.push(tag);
+    }
+    return {
+        title: fitText(drafted.title, storyLimits.title),
+        summary: fitText(drafted.summary, storyLimits.summary),
+        place: fitText(drafted.place, storyLimits.place),
+        time_period: fitText(drafted.time_period, storyLimits.time_period),
+        tags: tags.slice(0, storyLimits.tags),
+    };
+}
 
 // Anything the interviewer can't do becomes a 502 (or 503 for "try again in a
 // moment") with a message fit for the chat, and the details go to the log.
@@ -128,25 +157,56 @@ router.post("/conversations/:id/interview/skip", requireAuth, async (req, res) =
     res.json({ question });
 });
 
-// A draft for the publish dialog to fill in. The draft itself is kept in
-// story_drafts (the History tab, see ./drafts.js) so closing the dialog
-// doesn't lose it; what the user edits there is only stored by publishing.
+// A draft for the publish dialog to fill in: the story Claude wrote from the
+// interview, plus a title, summary, place, time period and tags for the form.
+// The draft itself is kept in story_drafts (see ./drafts.js)
+// so closing the dialog doesn't lose it; what the user edits there is only
+// stored by publishing.
+//
+// This is also how an interview ends ("End" on the Story tab): an `answer`
+// still in the box is saved as the last prompt first, so it's part of the
+// story -- without asking the interviewer for a question nobody will see. The
+// answer is kept even if writing the story then fails.
 router.post("/conversations/:id/interview/story", requireAuth, async (req, res) => {
     const conversationId = Number(req.params.id);
     const conversation = ownedConversation(conversationId, req.user.id);
+
+    const answer = String(req.body?.answer ?? "").trim();
+    if (answer.length > MAX_ANSWER_LENGTH) {
+        throw new ApiError(400, `Answer is too long (max ${MAX_ANSWER_LENGTH} characters)`);
+    }
+    if (answer) insertPrompt(conversationId, { content: answer });
+
     const prompts = promptsOf(conversationId);
     if (prompts.length === 0) throw new ApiError(400, "Answer a question or two first");
 
-    const story = await ask(
-        () => interviewer.draftStory(conversation.opening_question, prompts),
+    const drafted = await ask(
+        () =>
+            interviewer.draftStory(conversation.opening_question, prompts, {
+                recordedAt: conversation.creation_date,
+                mode: conversation.interview_mode,
+            }),
         "Couldn't write your story just now. Try again."
     );
+    const story = fitText(drafted.story, storyLimits.content);
+    const details = storyDetails(drafted);
 
     const createdAt = new Date().toISOString();
     const info = db
-        .prepare("INSERT INTO story_drafts (user_id, conversation_id, content, created_at) VALUES (?, ?, ?, ?)")
-        .run(req.user.id, conversationId, story, createdAt);
-    res.json({ story, draft_id: Number(info.lastInsertRowid), created_at: createdAt });
+        .prepare(
+            "INSERT INTO story_drafts (user_id, conversation_id, content, details, created_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .run(req.user.id, conversationId, story, JSON.stringify(details), createdAt);
+    appendTranscript(conversationId, `[${new Date().toISOString()}] AI (story written, draft ${info.lastInsertRowid})`);
+    res.json({
+        story,
+        ...details,
+        // false when the interview AI is switched off and `story` is just the
+        // answers, so the Story tab can say so instead of looking written.
+        ai: drafted.ai === true,
+        draft_id: Number(info.lastInsertRowid),
+        created_at: createdAt,
+    });
 });
 
 module.exports = { router };

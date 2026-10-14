@@ -176,9 +176,23 @@ test("the story is written from the transcript", async () => {
         body: { content: "She was my neighbour" },
     });
 
-    fakeClient.replies.push("I met Mei when she moved in next door.");
+    fakeClient.replies.push(
+        "<title>The Girl Next Door</title>\n" +
+            "<summary>How Mei moved in next door and changed everything.</summary>\n" +
+            "<place>Seattle</place>\n<time_period>the summer of 1985</time_period>\n" +
+            "<tags>Friendship, #Childhood, Friendship</tags>\n" +
+            "<story>I met Mei when she moved in next door.\n\nWe were inseparable.</story>"
+    );
     const drafted = await request("POST", `/conversations/${conversationId}/interview/story`, { token });
-    assert.equal(drafted.body.story, "I met Mei when she moved in next door.");
+    assert.equal(drafted.status, 200);
+    assert.equal(drafted.body.story, "I met Mei when she moved in next door.\n\nWe were inseparable.");
+    assert.equal(drafted.body.title, "The Girl Next Door");
+    assert.equal(drafted.body.summary, "How Mei moved in next door and changed everything.");
+    assert.equal(drafted.body.place, "Seattle");
+    assert.equal(drafted.body.time_period, "the summer of 1985");
+    // No '#', no repeats -- the way the publish form stores tags.
+    assert.deepEqual(drafted.body.tags, ["Friendship", "Childhood"]);
+    assert.equal(drafted.body.ai, true);
 
     const storyRequest = fakeClient.requests.at(-1);
     assert.equal(storyRequest.output_config, undefined);
@@ -186,7 +200,63 @@ test("the story is written from the transcript", async () => {
     assert.ok(prompt.includes("Interviewer: Who would you like to talk about?"));
     assert.ok(prompt.includes("Storyteller: She was my neighbour"));
     assert.ok(prompt.includes("Interviewer: How did you meet her?"));
+    // Context the transcript alone doesn't carry: when it was recorded, and the topic.
+    assert.match(prompt, /This interview was recorded on \w+day, \w+ \d{1,2}, \d{4}\./);
+    assert.ok(prompt.includes(`Interview topic: ${interviewer.MODES.People.focus}`));
+    assert.ok(storyRequest.system.includes("never invent"));
 });
+
+test("ending with an answer still in the box saves it and asks for no question", async () => {
+    const token = await signupAndLogin("cora6", "cora6@example.com");
+    const conversationId = await startedInterview(token);
+
+    fakeClient.replies.push("<title>Next Door</title><story>She was my neighbour.</story>");
+    const drafted = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "  She was my neighbour  " },
+    });
+    assert.equal(drafted.status, 200);
+    assert.equal(fakeClient.requests.length, 1, "only the story is asked for -- no next question");
+    assert.ok(fakeClient.requests[0].messages[0].content.includes("Storyteller: She was my neighbour"));
+
+    const prompts = (await request("GET", `/conversations/${conversationId}/prompts`, { token })).body;
+    assert.deepEqual(
+        prompts.map((prompt) => [prompt.content, prompt.response]),
+        [["She was my neighbour", null]]
+    );
+});
+
+test("the last answer is kept even when the story can't be written", async () => {
+    const token = await signupAndLogin("cora7", "cora7@example.com");
+    const conversationId = await startedInterview(token);
+
+    fakeClient.replies.push(new AnthropicBedrockMantle.InternalServerError(500, undefined, "boom", new Headers()));
+    const res = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "Don't lose this" },
+    });
+    assert.equal(res.status, 503);
+    const prompts = (await request("GET", `/conversations/${conversationId}/prompts`, { token })).body;
+    assert.equal(prompts.at(-1).content, "Don't lose this");
+    assert.deepEqual((await request("GET", "/drafts", { token })).body, []);
+});
+
+test("a story cut off by max_tokens is an error, not a finished story", async () => {
+    const token = await signupAndLogin("cora8", "cora8@example.com");
+    const conversationId = await startedInterview(token);
+
+    fakeClient.replies.push({
+        stop_reason: "max_tokens",
+        content: [{ type: "text", text: "<title>Half</title><story>It all began when" }],
+    });
+    const res = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "A long one" },
+    });
+    assert.equal(res.status, 502);
+    assert.deepEqual((await request("GET", "/drafts", { token })).body, []);
+});
+
 
 test("interviewMessages leaves an unanswered turn as back-to-back answers", () => {
     const messages = interviewer.interviewMessages("Opening?", [
@@ -204,3 +274,76 @@ test("interviewMessages leaves an unanswered turn as back-to-back answers", () =
         ]
     );
 });
+
+test("drafted details are trimmed to fit the publish form", async () => {
+    const token = await signupAndLogin("cora9", "cora9@example.com");
+    const conversationId = await startedInterview(token);
+
+    const longTitle = "word ".repeat(60).trim(); // ~300 characters; titles allow 120
+    const tags = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "x".repeat(41)].join(", ");
+    fakeClient.replies.push(`<title>${longTitle}</title><tags>${tags}</tags><story>Short story.</story>`);
+    const drafted = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "Something" },
+    });
+    assert.equal(drafted.status, 200);
+    assert.ok(drafted.body.title.length <= 120);
+    assert.ok(drafted.body.title.endsWith("word"), "cut at a word break");
+    assert.deepEqual(drafted.body.tags, ["One", "Two", "Three", "Four", "Five", "Six"]);
+    assert.equal(drafted.body.place, "");
+
+    // Publishing exactly what was drafted works.
+    const published = await request("POST", "/stories", {
+        token,
+        body: {
+            conversation_id: conversationId,
+            title: drafted.body.title,
+            content: drafted.body.story,
+            tags: drafted.body.tags,
+        },
+    });
+    assert.equal(published.status, 201);
+});
+
+test("History keeps the drafted details with the story", async () => {
+    const token = await signupAndLogin("cora10", "cora10@example.com");
+    const conversationId = await startedInterview(token);
+
+    fakeClient.replies.push(
+        "<title>Moving Day</title><summary>We left the farm.</summary><place>rural Ohio</place>" +
+            "<time_period></time_period><tags>Family</tags><story>We left the farm in a borrowed truck.</story>"
+    );
+    const drafted = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "We moved" },
+    });
+    const [draft] = (await request("GET", "/drafts", { token })).body;
+    assert.equal(draft.draft_id, drafted.body.draft_id);
+    assert.equal(draft.content, "We left the farm in a borrowed truck.");
+    assert.equal(draft.title, "Moving Day");
+    assert.equal(draft.summary, "We left the farm.");
+    assert.equal(draft.place, "rural Ohio");
+    assert.equal(draft.time_period, "");
+    assert.deepEqual(draft.tags, ["Family"]);
+});
+
+test("parseStoryReply: missing details are blank, and a reply with no tags is all story", () => {
+    assert.deepEqual(interviewer.parseStoryReply("<story>Just the story.</story>"), {
+        title: "",
+        summary: "",
+        place: "",
+        time_period: "",
+        tags: [],
+        story: "Just the story.",
+    });
+    const untagged = interviewer.parseStoryReply("I grew up by the river.\n\nIt flooded every spring.");
+    assert.equal(untagged.story, "I grew up by the river.\n\nIt flooded every spring.");
+    // Tags but no <story>: what's left outside the tags is the story.
+    assert.equal(
+        interviewer.parseStoryReply("<title>River</title>\nI grew up by the river.").story,
+        "I grew up by the river."
+    );
+    assert.throws(() => interviewer.parseStoryReply("<title>Only a title</title>"), interviewer.InterviewerError);
+    assert.throws(() => interviewer.parseStoryReply("<story>  </story>"), interviewer.InterviewerError);
+});
+

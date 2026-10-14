@@ -231,6 +231,37 @@ test("stop() still delivers the last words Chrome heard", async () => {
     assert.deepEqual(log.listening, [true, false]);
 });
 
+test("finish() turns the mic off and waits for the last words", async () => {
+    const { dictation, rec, log } = await listening();
+    rec.heard(["and that was the last", false]);
+    let done = false;
+    const finished = dictation.finish().then(() => (done = true));
+    assert.equal(dictation.listening, false);
+    assert.equal(rec.stopCalls, 1, "stop(), not abort(), so Chrome hands the words over");
+    assert.equal(done, false, "still waiting for Chrome");
+    await finished; // the fake's onend fires on a microtask
+    assert.deepEqual(log.final, ["and that was the last"], "the phrase in progress counts as said");
+});
+
+test("finish() gives up waiting if Chrome never reports back", async () => {
+    const { dictation, rec } = await listening();
+    rec.finish = () => {}; // no onend, ever
+    let done = false;
+    const finished = dictation.finish().then(() => (done = true));
+    await settle();
+    assert.equal(done, false);
+    mock.timers.tick(1500);
+    await finished;
+    assert.equal(done, true);
+});
+
+test("finish() resolves straight away when the mic is already off", async () => {
+    const { env } = makeEnv();
+    const dictation = createDictation(recorder().callbacks, env);
+    await dictation.finish();
+    assert.equal(dictation.listening, false);
+});
+
 test("stop({ discard: true }) aborts and drops words not yet handed over", async () => {
     const { dictation, rec, log } = await listening();
     rec.heard(["half a sentence", false]);

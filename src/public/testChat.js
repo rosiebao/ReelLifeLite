@@ -3,9 +3,8 @@
 // mode, start one, and the interviewer (../interview.js) asks a question;
 // every answer -- typed, or dictated through voiceInput.js -- is saved and
 // answered with the next question. "Skip question" swaps the latest question
-// for another, and "Write my story" has the interviewer turn the answers into
-// a draft for the publish dialog (the server also keeps it for the History
-// tab, history.js).
+// for another, and "End" finishes the interview: the interviewer writes the
+// whole interview up as a story and it opens in the publish dialog.
 //
 // Voice (ported from ReelLife): each question is read aloud (voiceOutput.js)
 // and the microphone (voiceInput.js) listens for the answer, switching off
@@ -20,9 +19,9 @@
 // tab is hidden, or they leave the Story tab.
 //
 // Publishing a conversation as a story lives in stories.js, which owns the
-// publish bar above the message list; this file just tells it which
-// conversation is selected (refreshPublishStatus) and hands it the draft
-// (openPublishModal).
+// "Published / Not published" status above the message list; this file just
+// tells it which conversation is selected (refreshPublishStatus) and hands it
+// the story written on End (openPublishModal).
 
 const testState = {
     conversations: [],
@@ -47,7 +46,7 @@ const micHint = document.querySelector("#micHint");
 const voiceToggleBtn = document.querySelector("#voiceToggleBtn");
 const handsFreeBtn = document.querySelector("#handsFreeBtn");
 const skipQuestionBtn = document.querySelector("#skipQuestionBtn");
-const writeStoryBtn = document.querySelector("#writeStoryBtn");
+const endInterviewBtn = document.querySelector("#endInterviewBtn");
 
 function errorText(err) {
     return err.detail || err.message || "Something went wrong";
@@ -203,7 +202,7 @@ function setBusy(busy) {
     testState.busy = busy;
     testSendBtn.disabled = busy;
     skipQuestionBtn.disabled = busy;
-    writeStoryBtn.disabled = busy;
+    endInterviewBtn.disabled = busy;
 }
 
 // Runs one call to the interviewer with a "..." bubble standing in for its
@@ -335,24 +334,96 @@ skipQuestionBtn.addEventListener("click", async () => {
     }
 });
 
-writeStoryBtn.addEventListener("click", async () => {
+// Back to "pick a topic or a story", with no interview open.
+function closeTestConversation() {
+    stopVoice({ discard: true });
+    testState.selectedConversationId = null;
+    testConversationPanel.classList.add("hidden");
+    testEmptyState.classList.remove("hidden");
+    renderConversationList();
+}
+
+async function answerWasSaved(conversationId, answer) {
+    try {
+        const prompts = await storageApi.getPrompts(conversationId);
+        return prompts.at(-1)?.content === answer;
+    } catch (err) {
+        return false;
+    }
+}
+
+// "End", as on the original interview page, and the one way to get a story
+// out of an interview. After a confirm the microphone and voice go off and the
+// whole interview -- every question and answer -- is written up as a story by
+// the interviewer (one call to Claude, see ../interview.js), with a title,
+// summary, place, time period and tags; it then opens in the publish dialog.
+//
+// Words still being dictated are waited for, and whatever is in the answer
+// box goes along with the request, so ending mid-sentence keeps that sentence
+// -- without asking the interviewer for a next question nobody will see. A
+// "Writing your story…" bubble stands in while Claude works.
+//
+// With nothing answered at all there is no story to write, so the interview
+// is just closed (it stays under "Your Interviews" to pick back up).
+endInterviewBtn.addEventListener("click", async () => {
     const conversationId = testState.selectedConversationId;
     if (!conversationId || testState.busy || sessionEnded) return;
+    if (!confirm("End this interview and write it up as your story?")) return;
 
-    // Drafting the story is the end of the interview: stop talking and listening.
-    stopVoice();
-    const label = writeStoryBtn.textContent;
-    writeStoryBtn.textContent = "Writing…";
+    const label = endInterviewBtn.textContent;
+    endInterviewBtn.textContent = "Writing…";
     setBusy(true);
+    setHandsFree(false);
+    speaker?.stop();
+    // Let Chrome hand over the last words it heard into the answer box.
+    await dictation?.finish();
+    if (sessionEnded || !stillSelected(conversationId)) {
+        endInterviewBtn.textContent = label;
+        if (!sessionEnded) setBusy(false);
+        return;
+    }
+    stopVoice();
+
+    const answer = testMessageInput.value.trim();
+    const answerBubble = answer ? appendMessage("user", answer) : null;
+    if (answer) testMessageInput.value = "";
+    const pending = appendMessage("assistant", "✍️ Writing your story…");
+    pending.classList.add("pending", "writing");
     try {
-        const { story } = await storageApi.draftInterviewStory(conversationId);
-        refreshHistory();
-        if (stillSelected(conversationId)) await openPublishModal(conversationId, { draft: story });
+        const drafted = await storageApi.draftInterviewStory(conversationId, { answer });
+        // The server's interview AI is switched off: nothing wrote the story,
+        // it's the answers as they were. Say so rather than pass it off.
+        if (drafted.ai === false && stillSelected(conversationId)) {
+            appendMessage(
+                "error",
+                "The AI story writer is switched off on this server, so your story is just your answers as you " +
+                    "gave them. (Server setup: INTERVIEW_AI=bedrock in src/.env.)"
+            );
+        }
+        if (stillSelected(conversationId)) {
+            await openPublishModal(conversationId, { draft: drafted.story, details: drafted });
+        }
     } catch (err) {
-        if (sessionExpired(err)) return;
-        if (stillSelected(conversationId)) appendMessage("error", errorText(err));
+        if (sessionExpired(err) || !stillSelected(conversationId)) return;
+        // Nothing answered yet: no story to write, so just close it.
+        if (err.status === 400 && !answer) {
+            closeTestConversation();
+            return;
+        }
+        // The server saves the last answer before writing the story, so it is
+        // usually kept even when the story failed; if it never got there, it
+        // goes back in the box rather than being lost.
+        if (answer && !(await answerWasSaved(conversationId, answer))) {
+            testMessageInput.value = answer;
+            answerBubble.remove();
+        }
+        appendMessage(
+            "error",
+            err.status === 400 ? errorText(err) : `${errorText(err)} Your answers are all saved -- press End to try again.`
+        );
     } finally {
-        writeStoryBtn.textContent = label;
+        pending.remove();
+        endInterviewBtn.textContent = label;
         if (!sessionEnded) setBusy(false);
     }
 });

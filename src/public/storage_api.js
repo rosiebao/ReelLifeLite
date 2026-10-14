@@ -161,20 +161,15 @@ const storageApi = {
     return apiFetch(`/conversations/${conversationId}/interview/skip`, { method: "POST" });
   },
 
-  // { story, draft_id, created_at } -- a draft for the publish dialog, also
-  // kept in the History tab (listDrafts below).
-  draftInterviewStory(conversationId) {
-    return apiFetch(`/conversations/${conversationId}/interview/story`, { method: "POST" });
-  },
-
-  // ---- History (every story "Write my story" has written) ----
-
-  listDrafts() {
-    return apiFetch("/drafts");
-  },
-
-  deleteDraft(draftId) {
-    return apiFetch(`/drafts/${draftId}`, { method: "DELETE" });
+  // { story, title, summary, place, time_period, tags, draft_id, created_at }
+  // -- the interview written up as a story, with the publish form's details
+  // drafted too. `answer` is
+  // a last answer to save into the interview first (ending mid-answer).
+  draftInterviewStory(conversationId, { answer } = {}) {
+    return apiFetch(`/conversations/${conversationId}/interview/story`, {
+      method: "POST",
+      body: answer ? { answer } : {},
+    });
   },
 
   // ---- Family tree ----

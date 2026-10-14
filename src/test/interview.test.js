@@ -169,6 +169,38 @@ test("story drafts from the answers only", async () => {
     const drafted = await request("POST", `/conversations/${conversationId}/interview/story`, { token });
     assert.equal(drafted.status, 200);
     assert.equal(drafted.body.story, "First memory.\n\nSecond memory.");
+    // Without Claude the details are left for the author to fill in, and the
+    // reply says nothing wrote it.
+    assert.equal(drafted.body.title, "");
+    assert.deepEqual(drafted.body.tags, []);
+    assert.equal(drafted.body.ai, false);
+});
+
+test("story takes a last answer to end the interview on", async () => {
+    const token = await signupAndLogin("iris14", "iris14@example.com");
+    const { conversationId } = await newInterview(token);
+    await request("POST", `/conversations/${conversationId}/interview/answer`, { token, body: { content: "One." } });
+
+    const drafted = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "Two." },
+    });
+    assert.equal(drafted.status, 200);
+    assert.equal(drafted.body.story, "One.\n\nTwo.");
+    const prompts = (await request("GET", `/conversations/${conversationId}/prompts`, { token })).body;
+    assert.equal(prompts.at(-1).content, "Two.");
+    assert.equal(prompts.at(-1).response, null, "ending asks for no next question");
+});
+
+test("story refuses an over-long last answer", async () => {
+    const token = await signupAndLogin("iris15", "iris15@example.com");
+    const { conversationId } = await newInterview(token);
+    const res = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "x".repeat(20001) },
+    });
+    assert.equal(res.status, 400);
+    assert.deepEqual((await request("GET", `/conversations/${conversationId}/prompts`, { token })).body, []);
 });
 
 test("story needs at least one answer", async () => {

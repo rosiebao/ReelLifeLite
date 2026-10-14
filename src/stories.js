@@ -352,4 +352,17 @@ router.delete("/stories/:id", requireAuth, (req, res) => {
     res.json({ ok: true });
 });
 
-module.exports = { router };
+module.exports = {
+    router,
+    // The publish form's limits, so ../interview.js can fit a drafted story's
+    // details to them before the author ever sees the form.
+    limits: {
+        title: MAX_TITLE_LENGTH,
+        summary: MAX_SUMMARY_LENGTH,
+        place: MAX_PLACE_LENGTH,
+        time_period: MAX_TIME_PERIOD_LENGTH,
+        tags: MAX_TAGS,
+        tag: MAX_TAG_LENGTH,
+        content: MAX_CONTENT_LENGTH,
+    },
+};

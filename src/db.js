@@ -200,8 +200,8 @@ db.exec(`
 // The feed queries filter by visibility and then by author, so lead with it.
 db.exec("CREATE INDEX IF NOT EXISTS stories_visibility ON stories (visibility, user_id)");
 
-// Every story "Write my story" has produced, kept so the History tab can bring
-// one back after the publish dialog that showed it was closed. A draft is
+// Every story written when an interview ends ("End"), kept so one can be brought
+// back after the publish dialog that showed it was closed. A draft is
 // never edited: editing happens in the publish dialog, and publishing copies
 // the result into `stories`. Drafts go with their conversation.
 db.exec(`
@@ -214,6 +214,14 @@ db.exec(`
     )
 `);
 db.exec("CREATE INDEX IF NOT EXISTS story_drafts_user ON story_drafts (user_id, created_at)");
+
+// The publish-form details Claude drafted with the story (title, summary,
+// place, time_period, tags) as JSON, so reopening a draft from History fills
+// the form back in. NULL for drafts written before this column existed.
+const storyDraftColumns = db.prepare("PRAGMA table_info(story_drafts)").all();
+if (!storyDraftColumns.some((column) => column.name === "details")) {
+    db.exec("ALTER TABLE story_drafts ADD COLUMN details TEXT");
+}
 
 // Friend graph. One row per request, in the direction it was sent; a
 // friendship is that row once status flips to 'accepted', which is why every

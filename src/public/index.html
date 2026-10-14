@@ -38,7 +38,6 @@
                 <div id="navMenu" class="navMenu">
                     <nav aria-label="Main">
                         <button type="button" class="button" id="story">Tell Your Story</button>
-                        <button type="button" class="button" id="history">My Stories</button>
                         <button type="button" class="button" id="family">Family</button>
                         <button type="button" class="button" id="friends">Friends</button>
                         <button type="button" class="button" id="community">Community</button>
@@ -208,8 +207,8 @@
                                         title="Questions are read aloud -- click to mute">🔊 Voice on</button>
                                     <button type="button" id="handsFreeBtn" class="voiceToggle off" aria-pressed="false"
                                         title="Send each answer automatically when you stop talking">✋ Hands-free off</button>
-                                    <button type="button" id="writeStoryBtn">Write my story</button>
-                                    <button type="button" id="publishStoryBtn">Publish story</button>
+                                    <button type="button" id="endInterviewBtn" class="endButton"
+                                        title="Finish this interview and write it up as a story">End</button>
                                 </div>
                                 <div id="testMessageList" class="message-list"></div>
                                 <p id="liveCaption" class="liveCaption hidden" aria-live="polite"></p>
@@ -269,15 +268,6 @@
                     <h2>Recent Stories</h3>
                     <div class="otherStories" id="communityStories"></div>
                     <p id="communityStoriesEmpty" class="feedEmpty hidden">Nothing else published yet.</p>
-                </section>
-                <section id="historySection" class="inactive s6">
-                    <div class="historyBackground"></div>
-                    <h2>Story History</h2>
-                    <p class="historyIntro">Every story "Write my story" has written for you, newest first.</p>
-                    <ul id="historyList" class="historyList"></ul>
-                    <p id="historyEmpty" class="feedEmpty">
-                        Nothing here yet. Answer a few questions in the Story tab and press "Write my story".
-                    </p>
                 </section>
             </main>
         </div>
@@ -352,7 +342,6 @@
         <script type="text/javascript" src="sessionWatch.js"></script>
         <script type="text/javascript" src="testChat.js"></script>
         <script type="text/javascript" src="stories.js"></script>
-        <script type="text/javascript" src="history.js"></script>
         <script type="text/javascript" src="friends.js"></script>
         <script type="module" src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.esm.js"></script>
         <script nomodule src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.js"></script>

@@ -1,5 +1,5 @@
-// Tests for /drafts (drafts.js): every "Write my story" result is kept for the
-// History tab. INTERVIEW_AI is unset, so a draft is just the answers joined.
+// Tests for /drafts (drafts.js): every story written on "End" is kept for the
+// server. INTERVIEW_AI is unset, so a draft is just the answers joined.
 // Run with: npm test
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -76,6 +76,23 @@ test("writing a story saves it to the history", async () => {
     assert.equal(drafts[0].content, "The day we moved.");
     assert.equal(drafts[0].created_at, written.body.created_at);
     assert.equal(drafts[0].interview_mode, "Moments");
+    // The publish-form details ride along (blank without Claude).
+    assert.equal(drafts[0].title, "");
+    assert.deepEqual(drafts[0].tags, []);
+    assert.equal("details" in drafts[0], false, "the raw JSON column isn't exposed");
+});
+
+test("drafts from before details were stored come back with blank details", async () => {
+    const token = await signupAndLogin("dana7", "dana7@example.com");
+    const conversationId = await answeredInterview(token, ["Old one."]);
+    const written = await writeStory(token, conversationId);
+    db.prepare("UPDATE story_drafts SET details = NULL WHERE draft_id = ?").run(written.body.draft_id);
+
+    const [draft] = (await request("GET", "/drafts", { token })).body;
+    assert.equal(draft.content, "Old one.");
+    assert.equal(draft.title, "");
+    assert.equal(draft.place, "");
+    assert.deepEqual(draft.tags, []);
 });
 
 test("every draft is kept, newest first", async () => {

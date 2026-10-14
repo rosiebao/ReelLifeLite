@@ -20,8 +20,8 @@ const storyState = {
     // The form's values as the dialog opened with them, so closing can tell
     // whether anything has been typed since (publishFormDirty).
     publishingSnapshot: null,
-    // True when the story text came from "Write my story", which keeps a copy
-    // in the History tab -- worth saying when asking to discard edits.
+    // True when the story text was just written on "End". There's no tab to
+    // find it again, so closing without publishing asks first.
     publishingDraft: false,
     // The story open in the reader, so "Add friend" knows whose it is.
     readingStory: null,
@@ -456,8 +456,11 @@ storyAddFriendBtn.addEventListener("click", async () => {
 
 // Opened from the Story tab. An already-published conversation pre-fills the
 // form with its story so the dialog doubles as the edit screen. `draft` is the
-// interviewer's write-up ("Write my story"), which replaces the story text.
-async function openPublishModal(conversationId, { draft } = {}) {
+// interviewer's write-up from "End": its text replaces the
+// story text, and the details it came with (title, summary, place,
+// time_period, tags) fill in whatever the published story left blank -- an
+// author's own title is never overwritten by a fresh draft.
+async function openPublishModal(conversationId, { draft, details } = {}) {
     storyState.publishingConversationId = conversationId;
     show(publishError, false);
 
@@ -473,11 +476,12 @@ async function openPublishModal(conversationId, { draft } = {}) {
     publishSubmitBtn.textContent = story ? "Save changes" : "Publish";
     show(unpublishBtn, Boolean(story));
 
-    publishTitleInput.value = story?.title || "";
-    publishSummaryInput.value = story?.summary || "";
-    publishPlaceInput.value = story?.place || "";
-    publishTimePeriodInput.value = story?.time_period || "";
-    publishTagsInput.value = (story?.tags || []).join(", ");
+    const drafted = details || {};
+    publishTitleInput.value = story?.title || drafted.title || "";
+    publishSummaryInput.value = story?.summary || drafted.summary || "";
+    publishPlaceInput.value = story?.place || drafted.place || "";
+    publishTimePeriodInput.value = story?.time_period || drafted.time_period || "";
+    publishTagsInput.value = (story?.tags?.length ? story.tags : drafted.tags || []).join(", ");
     publishVisibilitySelect.value = story?.visibility || "friends";
     // Blank means "use what's in the conversation" -- the server rebuilds the
     // text from the author's messages (see ../stories.js).
@@ -503,14 +507,12 @@ function publishFormValues() {
     );
 }
 
-// Edited since the dialog opened. A fresh "Write my story" draft on its own
-// doesn't count: nothing has been typed, and History already has a copy.
+// Closing would lose something: edits typed since the dialog opened, or a
+// story "End" just wrote that hasn't been published -- there's no tab to
+// reopen it from, only End again (another write-up).
 function publishFormDirty() {
-    return (
-        !publishModal.classList.contains("hidden") &&
-        storyState.publishingSnapshot !== null &&
-        publishFormValues() !== storyState.publishingSnapshot
-    );
+    if (publishModal.classList.contains("hidden") || storyState.publishingSnapshot === null) return false;
+    return storyState.publishingDraft || publishFormValues() !== storyState.publishingSnapshot;
 }
 
 // The author's own messages, which is exactly what the server would derive on
@@ -540,10 +542,10 @@ function closePublishModal() {
 // and unpublishing close it directly, since there's nothing left to lose.
 function requestClosePublishModal() {
     if (publishFormDirty()) {
-        let message = "You have unsaved changes to this story. Close without saving them?";
-        if (storyState.publishingDraft) {
-            message += '\n\nThe original story from "Write my story" is still in the History tab.';
-        }
+        const message = storyState.publishingDraft
+            ? "Close without publishing the story the interviewer just wrote? " +
+              "To get it back you'd have to press End again, which writes it afresh."
+            : "You have unsaved changes to this story. Close without saving them?";
         if (!confirm(message)) return;
     }
     closePublishModal();
@@ -607,10 +609,12 @@ unpublishBtn.addEventListener("click", async () => {
     }
 });
 
-// ---- The Story tab's publish bar ----
+// ---- The Story tab's publish status ----
+// There is no publish button on the interview: "End" (testChat.js) writes the
+// story and opens the publish dialog, and a published story is edited from
+// the "Your Stories" reader (storyReaderEditBtn).
 
 const storyPublishStatus = document.querySelector("#storyPublishStatus");
-const publishStoryBtn = document.querySelector("#publishStoryBtn");
 
 // Called by testChat.js whenever the selected conversation changes.
 async function refreshPublishStatus(conversationId) {
@@ -626,18 +630,11 @@ async function refreshPublishStatus(conversationId) {
     if (story) {
         storyPublishStatus.textContent = `Published • ${VISIBILITY_LABELS[story.visibility]}`;
         storyPublishStatus.classList.add("published");
-        publishStoryBtn.textContent = "Edit publication";
     } else {
         storyPublishStatus.textContent = "Not published";
         storyPublishStatus.classList.remove("published");
-        publishStoryBtn.textContent = "Publish story";
     }
 }
-
-publishStoryBtn.addEventListener("click", () => {
-    if (testState.selectedConversationId === null) return;
-    openPublishModal(testState.selectedConversationId);
-});
 
 // Esc closes whichever dialog is open.
 document.addEventListener("keydown", (event) => {
