@@ -84,6 +84,9 @@
         let watchdogTimer = null;
         let pauseTimer = null;
         let heardSincePause = false;
+        // A pause found the last words unfinished; onend fires it once they're in.
+        let pauseAfterEnd = false;
+        let flushTimer = null;
         let lastInterim = "";
         let state = "idle";
         let permissionGranted = false;
@@ -116,7 +119,10 @@
         function clearPauseTimer() {
             clearTimeout(pauseTimer);
             pauseTimer = null;
+            clearTimeout(flushTimer);
+            flushTimer = null;
             heardSincePause = false;
+            pauseAfterEnd = false;
         }
 
         function startListening() {
@@ -191,19 +197,42 @@
         }
 
         // Fires onSpeechPause after the storyteller has been quiet for a moment.
+        //
+        // Quiet means no new results for SPEECH_PAUSE_MS. If the browser is
+        // still holding the last words as unfinished by then -- Safari does
+        // until the session ends, Chrome sometimes -- waiting longer would wait
+        // forever, so it is asked to finish them: stop() hands them over as
+        // final, and onend fires the pause (then listening restarts as usual).
         function schedulePauseCheck() {
             clearTimeout(pauseTimer);
             pauseTimer = setTimeout(() => {
                 pauseTimer = null;
+                if (!heardSincePause) return;
                 if (lastInterim && running) {
-                    // Words still arriving -- wait for them to settle.
-                    schedulePauseCheck();
+                    flushForPause();
                     return;
                 }
-                if (!heardSincePause) return;
                 heardSincePause = false;
                 onSpeechPause();
             }, SPEECH_PAUSE_MS);
+        }
+
+        function flushForPause() {
+            pauseAfterEnd = true;
+            endRecognition({ immediate: false });
+            // If the browser never reports back, abort() always ends it (onend
+            // still hands over the words it was holding).
+            clearTimeout(flushTimer);
+            flushTimer = setTimeout(() => {
+                flushTimer = null;
+                if (pauseAfterEnd && running) {
+                    try {
+                        recognition.abort();
+                    } catch (err) {
+                        /* already closed */
+                    }
+                }
+            }, FINISH_TIMEOUT_MS);
         }
 
         recognition.onstart = () => {
@@ -274,12 +303,18 @@
         recognition.onend = () => {
             starting = false;
             running = false;
+            const pauseNow = pauseAfterEnd && wanted && !suspended && !ignoreResults;
             // Whatever was still being heard counts as said.
             if (lastInterim && !suspended && !ignoreResults) onFinalText(lastInterim);
             lastInterim = "";
             onInterimText("");
             // finish(): the last words are in, so whoever is waiting can go on.
             for (const done of endWaiters.splice(0)) done();
+            // A pause was waiting on those words: they're in the box now.
+            if (pauseAfterEnd) {
+                clearPauseTimer();
+                if (pauseNow) onSpeechPause();
+            }
             if (shouldListen()) scheduleRestart();
         };
 

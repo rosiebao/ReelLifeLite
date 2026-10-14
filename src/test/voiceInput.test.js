@@ -358,16 +358,21 @@ test("onSpeechPause fires once after the storyteller goes quiet", async () => {
     assert.equal(log.pauses, 1, "silence alone isn't an answer");
 });
 
-test("more talking pushes the pause back, and words in progress hold it off", async () => {
+test("more talking pushes the pause back, and words still coming in hold it off", async () => {
     const { rec, log } = await listening();
     rec.heard(["First part,", true]);
     mock.timers.tick(1000);
-    rec.heard(["and the second part", false]);
-    mock.timers.tick(SPEECH_PAUSE_MS * 2);
+    // A long phrase: the browser keeps updating it while it is spoken.
+    for (const words of ["and the", "and the second", "and the second part"]) {
+        rec.heard([words, false]);
+        mock.timers.tick(SPEECH_PAUSE_MS - 100);
+    }
     assert.equal(log.pauses, 0, "a phrase is still being heard");
+    assert.equal(rec.stopCalls, 0);
     rec.heard(["and the second part.", true]);
     mock.timers.tick(SPEECH_PAUSE_MS);
     assert.equal(log.pauses, 1);
+    assert.equal(rec.stopCalls, 0, "everything was final -- no need to cut the session");
 });
 
 test("suspend() cancels a pending pause so a question can't trigger a send", async () => {
@@ -376,6 +381,53 @@ test("suspend() cancels a pending pause so a question can't trigger a send", asy
     dictation.suspend();
     mock.timers.tick(SPEECH_PAUSE_MS * 2);
     assert.equal(log.pauses, 0);
+});
+
+test("a pause with the last words still unfinished asks for them, then fires once they're in", async () => {
+    const { dictation, rec, log } = await listening();
+    // Safari (and sometimes Chrome) never marks the last phrase final until
+    // the session ends -- the pause mustn't wait for that forever.
+    rec.heard(["We grew tomatoes on the balcony", false]);
+    mock.timers.tick(SPEECH_PAUSE_MS - 1);
+    assert.equal(rec.stopCalls, 0, "still talking");
+    mock.timers.tick(1);
+    assert.equal(rec.stopCalls, 1, "asked the browser to hand over the words");
+    assert.equal(log.pauses, 0, "not before the words are in the box");
+    await settle(); // the fake's onend
+    assert.deepEqual(log.final, ["We grew tomatoes on the balcony"]);
+    assert.equal(log.pauses, 1);
+    assert.equal(dictation.listening, true, "the mic stays on");
+    mock.timers.tick(1000);
+    assert.ok(rec.startCalls >= 2, "and listening restarts for the next answer");
+    mock.timers.tick(30000);
+    assert.equal(log.pauses, 1, "fires once");
+});
+
+test("a pause whose stop() is never answered falls back to abort()", async () => {
+    const { rec, log } = await listening();
+    rec.stop = function () {
+        this.stopCalls += 1; // a browser that ignores stop()
+    };
+    rec.heard(["The summer of 1962", false]);
+    mock.timers.tick(SPEECH_PAUSE_MS);
+    assert.equal(rec.stopCalls, 1);
+    assert.equal(rec.abortCalls, 0);
+    mock.timers.tick(1500);
+    assert.equal(rec.abortCalls, 1);
+    await settle();
+    assert.deepEqual(log.final, ["The summer of 1962"]);
+    assert.equal(log.pauses, 1);
+});
+
+test("turning the mic off while a pause is collecting the last words doesn't fire it", async () => {
+    const { dictation, rec, log } = await listening();
+    rec.heard(["half a sentence", false]);
+    mock.timers.tick(SPEECH_PAUSE_MS);
+    dictation.stop({ discard: true });
+    await settle();
+    mock.timers.tick(5000);
+    assert.equal(log.pauses, 0);
+    assert.deepEqual(log.final, []);
 });
 
 test("the watchdog retries a start() that never reported back", async () => {

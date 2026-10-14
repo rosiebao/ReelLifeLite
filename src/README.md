@@ -233,7 +233,9 @@ the other side agrees. Declining deletes the row, so the pair can try again.
 - `public/voiceOutput.js` -- reads each new question aloud with the browser's
   text-to-speech (🔊 Voice on/off, remembered; 🔊 Listen on every question).
   The mic is switched off while a question plays so the interviewer's own voice
-  isn't taken for the answer. "Hands-free" sends an answer once you stop talking
+  isn't taken for the answer. "✋ Hands-free" sends an answer once you stop
+  talking; it is remembered on the device and holds for every interview until
+  turned off (picking "Type" turns it off too)
 - `public/sessionWatch.js` -- while an interview is open, keeps checking
   (`/whoami`, every minute and on tab focus / reconnect / another tab's
   sign-out) that you're still signed in as the same account. If not, the mic and

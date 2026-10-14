@@ -203,6 +203,12 @@ function setBusy(busy) {
     testSendBtn.disabled = busy;
     skipQuestionBtn.disabled = busy;
     endInterviewBtn.disabled = busy;
+    // Hands-free: an answer finished while the interviewer was busy goes out
+    // as soon as it's free, rather than waiting for the Send button.
+    if (!busy && autoSendWaiting) {
+        autoSendWaiting = false;
+        if (handsFree && dictation?.listening && !sessionEnded) setTimeout(sendAnswer, 0);
+    }
 }
 
 // Runs one call to the interviewer with a "..." bubble standing in for its
@@ -241,9 +247,9 @@ newTestConversationBtn.addEventListener("click", async () => {
     await refreshTestConversations();
     await selectTestConversation(conversationId);
     // The "Answer mode" picker decides how this interview is answered: Speak
-    // opens the microphone, Type doesn't. Either way each interview starts
-    // with hands-free off; the ✋ button above the chat turns it on.
-    setHandsFree(false);
+    // opens the microphone, Type doesn't. A spoken interview keeps the ✋
+    // Hands-free setting as it was last left.
+    setHandsFree(answerModeSelect.value !== "type" && savedHandsFree());
 
     try {
         const { question } = await withInterviewer(conversationId, () =>
@@ -374,8 +380,10 @@ endInterviewBtn.addEventListener("click", async () => {
 
     const label = endInterviewBtn.textContent;
     endInterviewBtn.textContent = "Writing…";
+    // Busy also keeps hands-free from sending the last words as an answer
+    // while they are collected; the ✋ setting itself is left as chosen.
     setBusy(true);
-    setHandsFree(false);
+    autoSendWaiting = false;
     speaker?.stop();
     // Let Chrome hand over the last words it heard into the answer box.
     await dictation?.finish();
@@ -432,10 +440,32 @@ endInterviewBtn.addEventListener("click", async () => {
 
 // ---- Answering out loud, and hearing the questions ----
 
+// The ✋ Hands-free setting is the storyteller's choice: remembered on this
+// device (like the voice toggle) and carried into every interview -- a new
+// one, the next answer, and after End -- until the ✋ button or picking
+// "Type" turns it off.
+const HANDS_FREE_KEY = "reellife_hands_free";
 let handsFree = false;
+// A hands-free answer that finished while the interviewer was busy.
+let autoSendWaiting = false;
 
-function setHandsFree(on) {
+function savedHandsFree() {
+    try {
+        return localStorage.getItem(HANDS_FREE_KEY) === "on";
+    } catch (err) {
+        return false;
+    }
+}
+
+function setHandsFree(on, { remember = false } = {}) {
     handsFree = Boolean(on && dictation);
+    if (remember) {
+        try {
+            localStorage.setItem(HANDS_FREE_KEY, handsFree ? "on" : "off");
+        } catch (err) {
+            // Storage blocked (private mode): it holds for this page only.
+        }
+    }
     handsFreeBtn.textContent = handsFree ? "✋ Hands-free on" : "✋ Hands-free off";
     handsFreeBtn.classList.toggle("off", !handsFree);
     handsFreeBtn.setAttribute("aria-pressed", String(handsFree));
@@ -445,8 +475,7 @@ function setHandsFree(on) {
 // ---- Answer mode (the Story Companion card) ----
 
 // Remembered on this device, like the voice toggle (voiceOutput.js). Just
-// "speak" or "type"; a "handsFree" saved before that option was removed
-// counts as "speak".
+// "speak" or "type"; whether speaking is hands-free is the ✋ setting above.
 const ANSWER_MODE_KEY = "reellife_answer_mode";
 const answerModeSelect = document.querySelector("#answerModeSelect");
 
@@ -460,7 +489,12 @@ function saveAnswerMode() {
 
 try {
     let saved = localStorage.getItem(ANSWER_MODE_KEY);
-    if (saved === "handsFree") saved = "speak";
+    if (saved === "handsFree") {
+        // The old "Speak hands-free" choice: speaking, with ✋ Hands-free on.
+        saved = "speak";
+        localStorage.setItem(ANSWER_MODE_KEY, saved);
+        if (localStorage.getItem(HANDS_FREE_KEY) === null) localStorage.setItem(HANDS_FREE_KEY, "on");
+    }
     if ([...answerModeSelect.options].some((option) => option.value === saved)) answerModeSelect.value = saved;
 } catch (err) {
     // Keep the default.
@@ -470,7 +504,7 @@ answerModeSelect.addEventListener("change", () => {
     saveAnswerMode();
     // Switching to typing mid-interview turns the microphone off for it.
     if (answerModeSelect.value === "type") {
-        setHandsFree(false);
+        setHandsFree(false, { remember: true });
         dictation?.stop();
     }
 });
@@ -531,8 +565,11 @@ const dictation = createDictation({
         appendMessage("error", message);
     },
     // Hands-free: the storyteller stopped talking, so the answer is complete.
+    // Sent right away, or as soon as the interviewer is free again.
     onSpeechPause() {
-        if (handsFree && dictation.listening && !testState.busy) sendAnswer();
+        if (!handsFree || !dictation.listening) return;
+        if (testState.busy) autoSendWaiting = true;
+        else sendAnswer();
     },
 });
 
@@ -547,6 +584,7 @@ const speaker = createSpeaker({
 });
 
 function stopVoice({ discard = false } = {}) {
+    autoSendWaiting = false;
     dictation?.stop({ discard });
     speaker?.stop();
 }
@@ -567,7 +605,7 @@ if (dictation) {
     });
 
     handsFreeBtn.addEventListener("click", () => {
-        setHandsFree(!handsFree);
+        setHandsFree(!handsFree, { remember: true });
         if (handsFree) {
             startMicrophone();
             // Hands-free is a way of speaking, so the picker follows along.
@@ -584,6 +622,9 @@ if (dictation) {
     for (const option of answerModeSelect.options) option.disabled = option.value !== "type";
     answerModeSelect.value = "type";
 }
+
+// Show the ✋ button as it was last left (off while "Type" is picked).
+setHandsFree(answerModeSelect.value !== "type" && savedHandsFree());
 
 if (speaker) {
     voiceToggleBtn.addEventListener("click", () => {

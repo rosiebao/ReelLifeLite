@@ -5,3 +5,5 @@ config.json
 .DS_Store
 src/conversation_files/
 src/app.db
+src/frontend/conversation_files/
+src/frontend/app.db
