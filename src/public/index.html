@@ -257,16 +257,21 @@
                     </p>
                 </section>
                 <section id="communitySection" class="inactive s5">
-                    <img src="Community.svg" alt="Community" />
                     <div class="communityBackground"></div>
-                    <h2>Featured</h3>
-                    <div id="featuredStory" class="hidden"></div>
-                    <p id="communityFeaturedEmpty" class="feedEmpty">
-                        No public stories yet. Publish one from the Story tab to get things started.
-                    </p>
-                    <h2>Recent Stories</h3>
-                    <div class="otherStories" id="communityStories"></div>
-                    <p id="communityStoriesEmpty" class="feedEmpty hidden">Nothing else published yet.</p>
+                    <div class="communityPage">
+                        <div class="communityHeader">
+                            <h2>Community</h2>
+                            <p>Discover stories from the ReelLife community.</p>
+                        </div>
+                        <h3 class="communityHeading">Featured</h3>
+                        <article id="featuredStory" class="hidden"></article>
+                        <p id="communityFeaturedEmpty" class="feedEmpty">
+                            No public stories yet. Publish one from the Story tab to get things started.
+                        </p>
+                        <h3 class="communityHeading">Recent Stories</h3>
+                        <div class="otherStories" id="communityStories"></div>
+                        <p id="communityStoriesEmpty" class="feedEmpty hidden">Nothing else published yet.</p>
+                    </div>
                 </section>
             </main>
         </div>
@@ -276,6 +281,7 @@
         <div id="publishModal" class="modalOverlay hidden">
             <div class="modalCard">
                 <h3 id="publishModalTitle">Publish your story</h3>
+                <p id="publishNotice" class="publishNotice hidden" role="status"></p>
                 <form id="publishForm" class="publishForm">
                     <label>Title
                         <input id="publishTitle" type="text" maxlength="120" required />

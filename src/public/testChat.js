@@ -402,16 +402,17 @@ endInterviewBtn.addEventListener("click", async () => {
     try {
         const drafted = await storageApi.draftInterviewStory(conversationId, { answer });
         // The server's interview AI is switched off: nothing wrote the story,
-        // it's the answers as they were. Say so rather than pass it off.
-        if (drafted.ai === false && stillSelected(conversationId)) {
-            appendMessage(
-                "error",
-                "The AI story writer is switched off on this server, so your story is just your answers as you " +
-                    "gave them. (Server setup: INTERVIEW_AI=bedrock in src/.env.)"
-            );
-        }
+        // it's the answers as they were. Said in the chat and on top of the
+        // publish form (which covers the chat), rather than passed off.
+        const notice =
+            drafted.ai === false
+                ? "The AI story writer is switched off on this server, so this is just your answers as you gave " +
+                  "them. (Server setup: set INTERVIEW_AI=bedrock and AWS credentials -- in src/.env locally, or in " +
+                  "the host's environment settings, e.g. Render.)"
+                : "";
+        if (notice && stillSelected(conversationId)) appendMessage("error", notice);
         if (stillSelected(conversationId)) {
-            await openPublishModal(conversationId, { draft: drafted.story, details: drafted });
+            await openPublishModal(conversationId, { draft: drafted.story, details: drafted, notice });
         }
     } catch (err) {
         if (sessionExpired(err) || !stillSelected(conversationId)) return;
@@ -427,9 +428,14 @@ endInterviewBtn.addEventListener("click", async () => {
             testMessageInput.value = answer;
             answerBubble.remove();
         }
+        const setupError = /isn't set up correctly/.test(errorText(err));
         appendMessage(
             "error",
-            err.status === 400 ? errorText(err) : `${errorText(err)} Your answers are all saved -- press End to try again.`
+            err.status === 400
+                ? errorText(err)
+                : setupError
+                  ? `${errorText(err)} Your answers are all saved -- press End again once it's fixed.`
+                  : `${errorText(err)} Your answers are all saved -- press End to try again.`
         );
     } finally {
         pending.remove();

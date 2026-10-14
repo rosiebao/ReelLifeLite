@@ -44,6 +44,7 @@ const publishTagsInput = document.querySelector("#publishTags");
 const publishVisibilitySelect = document.querySelector("#publishVisibility");
 const publishContentInput = document.querySelector("#publishContent");
 const publishError = document.querySelector("#publishError");
+const publishNotice = document.querySelector("#publishNotice");
 const publishSubmitBtn = document.querySelector("#publishSubmitBtn");
 const publishCancelBtn = document.querySelector("#publishCancelBtn");
 const unpublishBtn = document.querySelector("#unpublishBtn");
@@ -127,8 +128,8 @@ function visibilityLine(story) {
 }
 
 // `className` picks up the existing card styling: .friendStory in the Friends
-// grid (and the Me tab), .otherStory in the Community grid. `own` swaps the
-// byline for who the story is shared with.
+// grid (and the Me tab). The Community tab builds its own cards (communityCard
+// below). `own` swaps the byline for who the story is shared with.
 function storyCard(story, className, { own = false } = {}) {
     const card = document.createElement("div");
     card.className = className;
@@ -334,10 +335,13 @@ async function refreshCommunityStories() {
     const featured = stories.at(-1);
     const rest = stories.slice(0, -1);
     renderFeatured(featured || null);
-    renderCards(communityStoriesGrid, rest, "otherStory");
+    communityStoriesGrid.innerHTML = "";
+    for (const story of rest) communityStoriesGrid.appendChild(communityCard(story));
     show(communityStoriesEmpty, Boolean(featured) && rest.length === 0);
 }
 
+// The wide card at the top: picture on the left; title, author, summary and
+// "Read story" on the right.
 function renderFeatured(story) {
     show(featuredStory, Boolean(story));
     show(communityFeaturedEmpty, !story);
@@ -345,42 +349,172 @@ function renderFeatured(story) {
     featuredStory.onclick = null;
     if (!story) return;
 
-    const photo = document.createElement("img");
-    // The featured slot is a wide banner, and the default photo is a square
-    // avatar -- stretched across it, it just looks broken. Until stories can
-    // carry a picture of their own, a story still on the default gets the
-    // scenic image the mock-up used here.
-    photo.src = !story.photo || story.photo === "profile.jpg" ? "guangzhou.jpg" : story.photo;
-    photo.alt = "";
-    featuredStory.appendChild(photo);
+    // Until stories can carry a picture of their own, one still on the
+    // default gets the scenic image the mock-up used here.
+    featuredStory.appendChild(communityCover(story, { fallback: "guangzhou.jpg" }));
 
-    const title = document.createElement("h3");
+    const body = document.createElement("div");
+    body.className = "featuredBody";
+
+    const title = document.createElement("h4");
     title.id = "featuredTitle";
     title.textContent = story.title;
-    featuredStory.appendChild(title);
+    body.appendChild(title);
+    body.appendChild(communityAuthor(story));
 
-    if (story.tags.length) {
-        const tags = document.createElement("p");
-        tags.className = "tags";
-        tags.append(...tagElements(story.tags));
-        featuredStory.appendChild(tags);
-    }
+    const blurb = communityBlurb(story);
+    if (blurb) body.appendChild(blurb);
 
-    const setting = settingLine(story);
-    if (setting) featuredStory.appendChild(setting);
+    const actions = document.createElement("div");
+    actions.className = "featuredActions";
+    const read = document.createElement("button");
+    read.type = "button";
+    read.className = "readStoryButton";
+    read.textContent = "Read story";
+    actions.append(read, bookmarkButton(story));
+    body.appendChild(actions);
+    featuredStory.appendChild(body);
 
-    if (story.summary) {
-        const summary = document.createElement("p");
-        summary.className = "summary";
-        summary.textContent = story.summary;
-        featuredStory.appendChild(summary);
-    }
-
-    featuredStory.appendChild(bylineLine(story));
     // Assigned rather than added: #featuredStory is the same element across
     // refreshes, and stacked listeners would each open a story that used to be
-    // featured, with whichever request finished last winning.
+    // featured, with whichever request finished last winning. "Read story"
+    // bubbles up to this too.
     featuredStory.onclick = () => openStoryReader(story.story_id);
+}
+
+// ---- Community cards ----
+
+// Bookmarks are kept in this browser only -- there's no server side for them
+// yet -- as a list of story ids under one localStorage key.
+const SAVED_STORIES_KEY = "reellife_saved_stories";
+
+function savedStoryIds() {
+    try {
+        const ids = JSON.parse(localStorage.getItem(SAVED_STORIES_KEY) || "[]");
+        return Array.isArray(ids) ? ids.filter(Number.isInteger) : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function setStorySaved(storyId, saved) {
+    const ids = savedStoryIds().filter((id) => id !== storyId);
+    if (saved) ids.push(storyId);
+    try {
+        localStorage.setItem(SAVED_STORIES_KEY, JSON.stringify(ids));
+    } catch (err) {
+        // Storage can be refused (private browsing); the icon still toggles.
+    }
+}
+
+// The picture at the top (or, featured, the left) of a card. A story still on
+// the default avatar gets a soft placeholder -- a square cartoon stretched
+// into a wide banner just looks broken -- or `fallback` if one is given.
+function communityCover(story, { fallback = null } = {}) {
+    const ownPhoto = story.photo && story.photo !== "profile.jpg" ? story.photo : null;
+    const src = ownPhoto || fallback;
+    if (src) {
+        const photo = document.createElement("img");
+        photo.className = "communityCover";
+        photo.src = src;
+        photo.alt = "";
+        return photo;
+    }
+    const placeholder = document.createElement("div");
+    placeholder.className = "communityCover communityCoverPlaceholder";
+    const icon = document.createElement("ion-icon");
+    icon.setAttribute("name", "book-outline");
+    icon.setAttribute("aria-hidden", "true");
+    placeholder.appendChild(icon);
+    return placeholder;
+}
+
+// A small round avatar and the author's name. Accounts don't have profile
+// pictures yet, so everyone gets the default one.
+function communityAuthor(story) {
+    const line = document.createElement("p");
+    line.className = "communityAuthor";
+    const avatar = document.createElement("img");
+    avatar.src = "profile.jpg";
+    avatar.alt = "";
+    const name = document.createElement("span");
+    name.className = "author";
+    name.textContent = story.author;
+    line.append(avatar, name);
+    return line;
+}
+
+// The summary, or "Place • Time" when there isn't one, so a card isn't left
+// with just a title.
+function communityBlurb(story) {
+    const text = story.summary || settingLine(story)?.textContent;
+    if (!text) return null;
+    const blurb = document.createElement("p");
+    blurb.className = "summary";
+    blurb.textContent = text;
+    return blurb;
+}
+
+function bookmarkButton(story) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "bookmarkButton";
+    const icon = document.createElement("ion-icon");
+    icon.setAttribute("aria-hidden", "true");
+    button.appendChild(icon);
+
+    const paint = () => {
+        const saved = savedStoryIds().includes(story.story_id);
+        icon.setAttribute("name", saved ? "bookmark" : "bookmark-outline");
+        button.classList.toggle("saved", saved);
+        button.setAttribute("aria-pressed", String(saved));
+        button.title = saved ? "Saved" : "Save story";
+        button.setAttribute("aria-label", `Save "${story.title}"`);
+    };
+    paint();
+
+    button.addEventListener("click", (event) => {
+        // The card behind it opens the story.
+        event.stopPropagation();
+        setStorySaved(story.story_id, !savedStoryIds().includes(story.story_id));
+        paint();
+    });
+    return button;
+}
+
+// One "Recent Stories" card: picture on top, then the title, the summary, and
+// the author with a bookmark beside them.
+function communityCard(story) {
+    const card = document.createElement("article");
+    card.className = "communityCard";
+    card.tabIndex = 0;
+    card.setAttribute("aria-label", story.title);
+    card.appendChild(communityCover(story));
+
+    const body = document.createElement("div");
+    body.className = "communityCardBody";
+
+    const title = document.createElement("h4");
+    title.textContent = story.title;
+    body.appendChild(title);
+
+    const blurb = communityBlurb(story);
+    if (blurb) body.appendChild(blurb);
+
+    const footer = document.createElement("div");
+    footer.className = "communityCardFooter";
+    footer.append(communityAuthor(story), bookmarkButton(story));
+    body.appendChild(footer);
+    card.appendChild(body);
+
+    card.addEventListener("click", () => openStoryReader(story.story_id));
+    card.addEventListener("keydown", (event) => {
+        if (event.target === card && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            openStoryReader(story.story_id);
+        }
+    });
+    return card;
 }
 
 // Called by friends.js too: accepting a request changes what the Friends feed
@@ -460,9 +594,11 @@ storyAddFriendBtn.addEventListener("click", async () => {
 // story text, and the details it came with (title, summary, place,
 // time_period, tags) fill in whatever the published story left blank -- an
 // author's own title is never overwritten by a fresh draft.
-async function openPublishModal(conversationId, { draft, details } = {}) {
+async function openPublishModal(conversationId, { draft, details, notice = "" } = {}) {
     storyState.publishingConversationId = conversationId;
     show(publishError, false);
+    publishNotice.textContent = notice;
+    show(publishNotice, Boolean(notice));
 
     let story = null;
     try {

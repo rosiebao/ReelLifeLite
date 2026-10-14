@@ -17,6 +17,9 @@
 // often set for something else, wins over .env, and not every region serves
 // every model (an account can get "model does not exist" in one region and
 // the same model fine in another).
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { AnthropicBedrockMantle } = require("@anthropic-ai/bedrock-sdk");
 
 const USE_BEDROCK = process.env.INTERVIEW_AI === "bedrock";
@@ -107,8 +110,30 @@ const SKIP_REQUEST = "I'd rather not answer that one. Could you ask me something
 
 let client = null;
 
+// The Bedrock API key, cleaned of the usual paste mistakes in a host's
+// settings page (Render's Environment tab): surrounding quotes copied from a
+// shell file, a leading "AWS_BEARER_TOKEN_BEDROCK=" or "export ...", spaces.
+// Each of those makes Bedrock answer 401. Null when no key is set.
+function bedrockApiKey(env = process.env) {
+    const raw = env.AWS_BEARER_TOKEN_BEDROCK;
+    if (!raw) return null;
+    let key = raw.trim().replace(/^export\s+/, "").replace(/^AWS_BEARER_TOKEN_BEDROCK\s*=\s*/, "").trim();
+    key = key.replace(/^(["'])(.*)\1$/, "$2").trim();
+    return key || null;
+}
+
 function bedrockClient() {
-    if (!client) client = new AnthropicBedrockMantle(REGION ? { awsRegion: REGION } : {});
+    if (!client) {
+        const options = REGION ? { awsRegion: REGION } : {};
+        const apiKey = bedrockApiKey();
+        if (apiKey) {
+            if (apiKey !== process.env.AWS_BEARER_TOKEN_BEDROCK) {
+                console.warn("Interview AI: AWS_BEARER_TOKEN_BEDROCK had quotes, spaces or a name in it -- using the key inside");
+            }
+            options.apiKey = apiKey;
+        }
+        client = new AnthropicBedrockMantle(options);
+    }
     return client;
 }
 
@@ -122,21 +147,74 @@ function isBedrockEnabled() {
 }
 
 // Thrown for anything that stops the interviewer answering; interview.js turns
-// it into a 502/503 rather than the generic 500.
+// it into a 502/503 rather than the generic 500. `setup` is set when the cause
+// is the server's configuration (key, region, model) rather than a passing
+// failure, so the page can say "not set up" instead of "try again".
 class InterviewerError extends Error {
-    constructor(message, { retryable = false, cause } = {}) {
+    constructor(message, { retryable = false, setup = null, cause } = {}) {
         super(message, { cause });
         this.retryable = retryable;
+        this.setup = setup;
     }
 }
 
+// What's wrong with the setup, in a line the storyteller can pass on -- or
+// null for a failure that isn't about configuration.
+function setupProblem(err) {
+    const message = [err?.message, err?.cause?.message].filter(Boolean).join(" ");
+    if (err?.status === 403 && /not authorized|permission/i.test(message)) {
+        // The key is fine; the IAM user behind it lacks permission. The
+        // identity's name (no secret) is in the message, so it's named here.
+        const who = message.match(/User: (arn:aws:iam::\d+:[\w+=,.@/-]+)/)?.[1];
+        return (
+            `${who ? `the AWS user ${who}` : "the server's AWS user"} isn't allowed to use Claude on Bedrock ` +
+            "(attach the AmazonBedrockMantleInferenceAccess policy to it in IAM)"
+        );
+    }
+    if (err?.status === 401 || err?.status === 403) {
+        return "the server's AWS key was rejected (check AWS_BEARER_TOKEN_BEDROCK -- the key only, no quotes)";
+    }
+    if (err?.status === 404) return `the AI model isn't available in ${REGION} (check INTERVIEW_AWS_REGION)`;
+    if (/resolve AWS credentials|Could not load credentials/i.test(message)) {
+        return "the server has no AWS key (set AWS_BEARER_TOKEN_BEDROCK)";
+    }
+    if (/No AWS region/i.test(message)) return "the server has no AWS region (set INTERVIEW_AWS_REGION)";
+    return null;
+}
+
+// Whether the AWS SDK has any credential to find: a Bedrock API key, access
+// keys, a profile, a container / web-identity role, or ~/.aws. Only a hint for
+// the startup log -- a server with none of these (e.g. a fresh Render service)
+// gets a 401/403 on every call to Claude.
+function hasAwsCredentials(env = process.env, home = os.homedir()) {
+    const vars = [
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_PROFILE",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+    ];
+    if (vars.some((name) => env[name])) return true;
+    return ["credentials", "config"].some((file) => fs.existsSync(path.join(home, ".aws", file)));
+}
+
 // One line for the startup log, so it's obvious which interviewer is running.
-function describe() {
+function describe(env = process.env, home = os.homedir()) {
     if (!USE_BEDROCK) {
-        return "Interview AI: off, using canned questions (set INTERVIEW_AI=bedrock in .env to use Claude)";
+        return (
+            "Interview AI: off, using canned questions, and End just joins the answers " +
+            "(set INTERVIEW_AI=bedrock in .env, or in the host's environment settings, to use Claude)"
+        );
     }
     if (!REGION) {
         return "Interview AI: WARNING -- INTERVIEW_AI=bedrock but no INTERVIEW_AWS_REGION or AWS_REGION is set, so every question will fail";
+    }
+    if (!hasAwsCredentials(env, home)) {
+        return (
+            `Interview AI: WARNING -- Claude (${MODEL}) in ${REGION} is on, but no AWS credentials were found ` +
+            "(set AWS_BEARER_TOKEN_BEDROCK, or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY), so every question and story will fail"
+        );
     }
     return `Interview AI: Claude (${MODEL}) on AWS Bedrock in ${REGION}`;
 }
@@ -170,12 +248,27 @@ function interviewTranscript(openingQuestion, prompts) {
     return lines.join("\n\n");
 }
 
-async function callClaude({ system, messages, effort }) {
+// A one-token call to Claude, run once at startup (see app.js) so the deploy
+// log says straight away whether the key, region and model work -- instead of
+// the first storyteller finding out on "End". Never throws.
+async function checkConnection() {
+    if (!USE_BEDROCK) return { ok: false, problem: "off" };
+    try {
+        await callClaude({ messages: [{ role: "user", content: "Reply with OK." }], maxTokens: 8 });
+        return { ok: true };
+    } catch (err) {
+        // Cut off at 8 tokens is still a working connection.
+        if (/ran out of room/.test(err.message)) return { ok: true };
+        return { ok: false, problem: err.setup || err.message };
+    }
+}
+
+async function callClaude({ system, messages, effort, maxTokens = 16000 }) {
     let response;
     try {
         response = await bedrockClient().messages.create({
             model: MODEL,
-            max_tokens: 16000,
+            max_tokens: maxTokens,
             system,
             messages,
             ...(effort ? { output_config: { effort } } : {}),
@@ -191,7 +284,11 @@ async function callClaude({ system, messages, effort }) {
                 ? ` -- ${MODEL} isn't available to this account in ${REGION}; set INTERVIEW_AWS_REGION ` +
                   "(e.g. us-east-1) or INTERVIEW_MODEL in .env"
                 : "";
-        throw new InterviewerError(`Bedrock request failed: ${err.message}${hint}`, { retryable, cause: err });
+        throw new InterviewerError(`Bedrock request failed: ${err.message}${hint}`, {
+            retryable,
+            setup: setupProblem(err),
+            cause: err,
+        });
     }
 
     if (response.stop_reason === "refusal") {
@@ -323,6 +420,10 @@ module.exports = {
     MODEL,
     InterviewerError,
     describe,
+    hasAwsCredentials,
+    bedrockApiKey,
+    setupProblem,
+    checkConnection,
     parseMode,
     interviewMessages,
     openingQuestion,

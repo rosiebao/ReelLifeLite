@@ -45,7 +45,13 @@ app.use((err, req, res, next) => {
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`Server is running at http://localhost:${PORT}`);
-        console.log(require('./interviewer').describe());
+        const interviewer = require('./interviewer');
+        console.log(interviewer.describe());
+        // Try Claude once, so a wrong key or region shows up in the deploy log.
+        interviewer.checkConnection().then((result) => {
+            if (result.ok) console.log('Interview AI: connection to Claude OK');
+            else if (result.problem !== 'off') console.error(`Interview AI: NOT WORKING -- ${result.problem}`);
+        });
     });
 }
 

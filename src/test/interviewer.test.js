@@ -241,6 +241,61 @@ test("the last answer is kept even when the story can't be written", async () =>
     assert.deepEqual((await request("GET", "/drafts", { token })).body, []);
 });
 
+test("a rejected AWS key says the server isn't set up, not just 'try again'", async () => {
+    const token = await signupAndLogin("cora9", "cora9@example.com");
+    const conversationId = await startedInterview(token);
+
+    fakeClient.replies.push(
+        new AnthropicBedrockMantle.AuthenticationError(401, { message: "Invalid API key" }, "401 Invalid API key", new Headers())
+    );
+    const res = await request("POST", `/conversations/${conversationId}/interview/story`, {
+        token,
+        body: { answer: "Keep this too" },
+    });
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /isn't set up correctly on this server: the server's AWS key was rejected/);
+    assert.doesNotMatch(res.body.error, /Invalid API key/, "the raw Bedrock error stays in the server log");
+    const prompts = (await request("GET", `/conversations/${conversationId}/prompts`, { token })).body;
+    assert.equal(prompts.at(-1).content, "Keep this too");
+});
+
+test("setupProblem names the setting to fix, and leaves passing failures alone", () => {
+    assert.match(interviewer.setupProblem({ status: 403 }), /AWS key was rejected/);
+    // The Render case: a valid key whose IAM user lacks the Mantle permission.
+    const denied = interviewer.setupProblem({
+        status: 403,
+        message:
+            '403 {"type":"error","error":{"type":"permission_error","message":"User: arn:aws:iam::123456789012:user/ReelLife-Prod ' +
+            "is not authorized to perform: bedrock-mantle:CreateInference on resource: " +
+            'arn:aws:bedrock-mantle:us-east-1:123456789012:project/default because no identity-based policy allows the bedrock-mantle:CreateInference action"}}',
+    });
+    assert.match(denied, /arn:aws:iam::123456789012:user\/ReelLife-Prod isn't allowed/);
+    assert.match(denied, /AmazonBedrockMantleInferenceAccess/);
+    assert.match(interviewer.setupProblem({ status: 404 }), /INTERVIEW_AWS_REGION/);
+    assert.match(
+        interviewer.setupProblem(new Error("Failed to resolve AWS credentials from the credential provider chain.")),
+        /no AWS key/
+    );
+    assert.equal(interviewer.setupProblem({ status: 500, message: "boom" }), null);
+    assert.equal(interviewer.setupProblem(new Error("socket hang up")), null);
+});
+
+test("bedrockApiKey strips the quotes, names and spaces a pasted key picks up", () => {
+    const key = "ABSKexampleKey123==";
+    assert.equal(interviewer.bedrockApiKey({}), null);
+    assert.equal(interviewer.bedrockApiKey({ AWS_BEARER_TOKEN_BEDROCK: "  " }), null);
+    for (const pasted of [
+        key,
+        ` ${key}\n`,
+        `"${key}"`,
+        `'${key}'`,
+        `AWS_BEARER_TOKEN_BEDROCK=${key}`,
+        `export AWS_BEARER_TOKEN_BEDROCK="${key}"`,
+    ]) {
+        assert.equal(interviewer.bedrockApiKey({ AWS_BEARER_TOKEN_BEDROCK: pasted }), key, JSON.stringify(pasted));
+    }
+});
+
 test("a story cut off by max_tokens is an error, not a finished story", async () => {
     const token = await signupAndLogin("cora8", "cora8@example.com");
     const conversationId = await startedInterview(token);
@@ -345,5 +400,22 @@ test("parseStoryReply: missing details are blank, and a reply with no tags is al
     );
     assert.throws(() => interviewer.parseStoryReply("<title>Only a title</title>"), interviewer.InterviewerError);
     assert.throws(() => interviewer.parseStoryReply("<story>  </story>"), interviewer.InterviewerError);
+});
+
+test("hasAwsCredentials: a Bedrock key, access keys, a profile or ~/.aws count; a bare server doesn't", () => {
+    const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), "test-interviewer-home-"));
+    try {
+        // A fresh host (e.g. Render) with no AWS settings at all.
+        assert.equal(interviewer.hasAwsCredentials({}, emptyHome), false);
+        assert.equal(interviewer.hasAwsCredentials({ AWS_BEARER_TOKEN_BEDROCK: "x" }, emptyHome), true);
+        assert.equal(interviewer.hasAwsCredentials({ AWS_ACCESS_KEY_ID: "x" }, emptyHome), true);
+        assert.equal(interviewer.hasAwsCredentials({ AWS_PROFILE: "dev" }, emptyHome), true);
+        assert.equal(interviewer.hasAwsCredentials({ AWS_BEARER_TOKEN_BEDROCK: "" }, emptyHome), false);
+        fs.mkdirSync(path.join(emptyHome, ".aws"));
+        fs.writeFileSync(path.join(emptyHome, ".aws", "credentials"), "[default]\n");
+        assert.equal(interviewer.hasAwsCredentials({}, emptyHome), true);
+    } finally {
+        fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
 });
 

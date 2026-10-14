@@ -13,6 +13,18 @@ services:
         value: /data
       - key: MEDIA_ROOT
         value: /data/conversation_files
+      # Claude writes the story on "End". src/.env is git-ignored, so it never
+      # reaches Render -- these have to be set here (or in the dashboard's
+      # Environment tab). Without INTERVIEW_AI=bedrock, End just joins the
+      # answers; without a credential, every Claude call fails.
+      - key: INTERVIEW_AI
+        value: bedrock
+      - key: INTERVIEW_AWS_REGION
+        value: us-east-1
+      # The Bedrock API key. sync: false keeps it out of the repo: Render asks
+      # for it when the Blueprint is applied (Dashboard > Environment).
+      - key: AWS_BEARER_TOKEN_BEDROCK
+        sync: false
     # SQLite + transcripts must survive redeploys. Disks need a paid plan.
     disk:
       name: data

@@ -104,6 +104,42 @@ overrides it -- `INTERVIEW_AI=off npm start` runs one session without Claude.
 The tests never read `.env`. The AWS account needs Bedrock access to the model
 in `INTERVIEW_MODEL`.
 
+### On Render (or any host)
+
+`.env` is git-ignored, so **it is never deployed** -- a fresh Render service
+has no `INTERVIEW_AI`, and "End" just joins the answers (the Publish form says
+so). Set these in the service's **Environment** tab, or let `render.yaml` add
+them when the Blueprint is synced:
+
+| Variable | Value |
+|---|---|
+| `INTERVIEW_AI` | `bedrock` |
+| `INTERVIEW_AWS_REGION` | `us-east-1` |
+| `AWS_BEARER_TOKEN_BEDROCK` | the Bedrock API key (secret -- `render.yaml` only declares it, with `sync: false`) |
+
+(`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` work instead of the key.)
+Saving environment variables redeploys the service. Check the deploy log for:
+
+```
+Interview AI: Claude (anthropic.claude-opus-5) on AWS Bedrock in us-east-1
+```
+
+"Interview AI: off" means `INTERVIEW_AI` isn't set; a WARNING about
+credentials means the key is missing. Right after that the server tries
+Claude once and logs `Interview AI: connection to Claude OK` or
+`Interview AI: NOT WORKING -- <what to fix>`:
+
+| Log says | Fix |
+|---|---|
+| `the server's AWS key was rejected` | `AWS_BEARER_TOKEN_BEDROCK` is wrong or expired -- paste the key only (it starts `ABSK`), no quotes and no `AWS_BEARER_TOKEN_BEDROCK=` |
+| `the AWS user arn:aws:iam::...:user/<name> isn't allowed to use Claude` | The key works, but its IAM user lacks permission (Bedrock's own error says `not authorized to perform: bedrock-mantle:CreateInference`). In the AWS console: **IAM → Users → `<name>` → Add permissions → Attach policies directly → `AmazonBedrockMantleInferenceAccess`**. Takes effect within a minute; no redeploy needed |
+| `the server has no AWS key` | `AWS_BEARER_TOKEN_BEDROCK` isn't set on the service |
+| `the AI model isn't available in ...` | `INTERVIEW_AWS_REGION` should be `us-east-1` |
+
+The Story tab shows the same "isn't set up correctly" message instead of
+"try again" when End hits one of these. (Surrounding quotes and a leading
+`AWS_BEARER_TOKEN_BEDROCK=` are stripped automatically.)
+
 ## Running the tests
 
 ```bash

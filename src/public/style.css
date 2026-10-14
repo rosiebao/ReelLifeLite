@@ -428,13 +428,13 @@ main > section#selfSection h2 {
 .familyTree ~ button:active {
     background-color: #4b4b4b;
 }
-.friendsWrapper, .otherStories {
+.friendsWrapper {
     display: grid;
     padding: 0 5vw;
     grid-template-columns: 1fr 1fr;
     gap: 2vh 5vw;
 }
-.friendStory, .otherStory {
+.friendStory {
     height: 20vh;
     box-shadow: 1px 5px 8px 5px #bfbfbf22;
     padding: 2.5vmin;
@@ -444,14 +444,14 @@ main > section#selfSection h2 {
     background-color: #ffffff22;
     backdrop-filter: blur(10px);
 }
-.friendStory:hover, .otherStory:hover {
+.friendStory:hover {
     box-shadow: 1px 5px 8px 5px #88888866;
     scale: 1.025;
 }
-.friendStory:active, .otherStory:active {
+.friendStory:active {
     box-shadow: 1px 5px 8px 5px #66666699;
 }
-.friendStory img, .otherStory img {
+.friendStory img {
     width: 10vmin;
     height: 10vmin;
     float: left;
@@ -460,35 +460,7 @@ main > section#selfSection h2 {
     top: -2.5vmin;
     border-top-left-radius: 50px;
 }
-#featuredStory {
-    width: 60vw;
-    margin: 0 auto 5vh;
-    box-shadow: 1px 5px 8px 5px #bfbfbf22;
-    cursor: pointer;
-    height: 30vh;
-    border-radius: 50px;
-    transition: all 0.3s ease-in-out;
-    background-color: #ffffff22;
-    backdrop-filter: blur(10px);
-}
-#featuredStory:hover {
-    box-shadow: 1px 5px 8px 5px #88888866;
-    scale: 1.025;
-}
-#featuredStory:active {
-    box-shadow: 1px 5px 8px 5px #66666699;
-}
-#featuredStory p {
-    padding-left: 5px;
-}
-#featuredStory img {
-    width: 60vw;
-    height: 10vh;
-    object-fit: cover;
-    border-top-left-radius: 50px;
-    border-top-right-radius: 50px;
-}
-.friendsWrapper, .otherStories {
+.friendsWrapper {
     box-sizing: content-box;
     padding: 10px 10px 20px;
 }
@@ -1050,6 +1022,15 @@ body.restoringPage main > section {
 .publishError {
     color: #aa2222;
 }
+/* Said above the form when End couldn't have Claude write the story. */
+.publishNotice {
+    margin: 0 0 1vh;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #fff4d6;
+    color: #6b4b00;
+    font-size: 0.95em;
+}
 .modalActions {
     display: flex;
     align-items: center;
@@ -1203,22 +1184,209 @@ body.restoringPage main > section {
 #friendsSection {
     padding-top: 3vh;
 }
-#communitySection > img {
-    display: block;
-    margin: 0 auto 2vh;
-    height: 5vh;
-}
+/* ---- Community tab ----
+   A left-aligned page in one centred column: the "Community" heading, a wide
+   featured card (picture left, details right), then a two-column grid of
+   picture-on-top cards. */
 .communityBackground {
     position: absolute;
     z-index: -999;
-    top: 10vh;
+    top: 0;
     right: 0;
     bottom: 0;
     left: 0;
-    background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
+    background-color: #f4f1ec;
 }
 #communitySection {
     padding-top: 3vh;
+}
+.communityPage {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 32px;
+    color: var(--navy);
+}
+main > section .communityHeader h2 {
+    text-align: left;
+    font-size: 2.6rem;
+    font-weight: 900;
+    line-height: 1.1;
+}
+.communityHeader p {
+    margin-top: 6px;
+    color: #4a5468;
+    font-size: 1.05rem;
+}
+main > section h3.communityHeading {
+    margin: 32px 0 14px;
+    text-align: left;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+.communityPage .feedEmpty {
+    padding: 8px 0;
+    text-align: left;
+}
+#featuredStory,
+.communityCard {
+    border: 1px solid #ebe6de;
+    border-radius: 16px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 16px rgba(10, 25, 54, 0.06);
+    cursor: pointer;
+    transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+#featuredStory:hover,
+.communityCard:hover {
+    box-shadow: 0 10px 28px rgba(10, 25, 54, 0.14);
+    transform: translateY(-2px);
+}
+.communityCard:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+#featuredStory {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 28px;
+    padding: 14px;
+}
+#featuredStory .communityCover {
+    aspect-ratio: 16 / 9;
+}
+/* The id rule above outranks .hidden. */
+#featuredStory.hidden {
+    display: none;
+}
+.communityCover {
+    display: block;
+    width: 100%;
+    aspect-ratio: 2 / 1;
+    object-fit: cover;
+    border-radius: 10px;
+}
+/* A story without a picture of its own. */
+.communityCoverPlaceholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: linear-gradient(135deg, #dbeefc, #f4f1ec 55%, #fbd9cf);
+    color: #0a193666;
+    font-size: 3rem;
+}
+.featuredBody {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-right: 12px;
+}
+#featuredTitle {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+.featuredBody .summary {
+    color: #3c4558;
+    font-size: 1.05rem;
+}
+.featuredActions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.readStoryButton {
+    padding: 10px 26px;
+    border: 1.5px solid var(--navy);
+    border-radius: 8px;
+    background-color: #ffffff;
+    color: var(--navy);
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+.readStoryButton:hover {
+    background-color: var(--navy);
+    color: #ffffff;
+}
+.communityAuthor {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    font-size: 0.95rem;
+}
+.communityAuthor img {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.communityAuthor .author {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bookmarkButton {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--navy);
+    font-size: 1.35rem;
+    cursor: pointer;
+}
+.bookmarkButton:hover {
+    background-color: #0a19360f;
+}
+.bookmarkButton.saved {
+    color: var(--gold);
+}
+.otherStories {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+.communityCard {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+.communityCardBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 4px 2px;
+}
+.communityCardBody h4 {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+.communityCardBody .summary {
+    color: #4a5468;
+    font-size: 0.92rem;
+    line-height: 1.4;
+    /* Two lines at most, so the cards in a row line up. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.communityCardFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 8px;
 }
 /* ---- Top bar on smaller screens ---- */
 /* Laptop / tablet: tighten the spacing and shrink the links a little so all
@@ -1422,6 +1590,30 @@ body.restoringPage main > section {
     }
     .message-form {
         padding: 0 10px 10px;
+    }
+
+    /* ---- Community tab on a phone ----
+       One column; the featured card puts its picture on top like the rest. */
+    .communityPage {
+        padding: 0 14px;
+    }
+    main > section .communityHeader h2 {
+        font-size: 2rem;
+    }
+    #featuredStory {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        padding: 10px;
+    }
+    .featuredBody {
+        padding: 0 4px 4px;
+    }
+    #featuredTitle {
+        font-size: 1.35rem;
+    }
+    .otherStories {
+        grid-template-columns: 1fr;
+        gap: 14px;
     }
 }
 

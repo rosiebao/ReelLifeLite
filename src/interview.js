@@ -55,6 +55,10 @@ async function ask(generate, failure = "The interviewer couldn't come up with a 
     } catch (err) {
         if (!(err instanceof interviewer.InterviewerError)) throw err;
         console.error(err);
+        // The server isn't set up right: trying again won't help, so say what's
+        // wrong (no secrets in it) for whoever runs the server. Checked first:
+        // a missing key reaches here dressed as a connection error.
+        if (err.setup) throw new ApiError(502, `The AI interviewer isn't set up correctly on this server: ${err.setup}.`);
         if (err.retryable) throw new ApiError(503, "The interviewer is busy right now. Try again in a moment.");
         throw new ApiError(502, failure);
     }
