@@ -1068,83 +1068,6 @@ body.restoringPage main > section {
     margin-bottom: 1vh;
 }
 
-/* ---- Friends tab: people panel ---- */
-.peoplePanel {
-    margin: 0 5vw 3vh;
-    padding: 2vmin;
-    border-radius: 30px;
-    background-color: #ffffff44;
-    backdrop-filter: blur(10px);
-}
-.friendSearchForm {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 1vh;
-}
-.friendSearchForm input {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #cccccc;
-    border-radius: 10px;
-    font-family: inherit;
-}
-.friendSearchForm button {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 10px;
-    background-color: #bfffbf;
-    cursor: pointer;
-}
-.peoplePanel summary {
-    cursor: pointer;
-    padding: 5px 0;
-    font-weight: 700;
-}
-.peoplePanel h4 {
-    margin-top: 1vh;
-}
-.peopleList {
-    list-style: none;
-}
-.personRow {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0;
-    border-bottom: 1px solid #ffffff88;
-}
-.personName {
-    flex: 1;
-    font-weight: 700;
-}
-.personNote {
-    font-size: 0.85em;
-    color: #666666;
-}
-.personRow button {
-    padding: 6px 14px;
-    border: none;
-    border-radius: 10px;
-    background-color: #dfdfdf;
-    cursor: pointer;
-}
-.personRow .primaryButton {
-    background-color: #bfffbf;
-}
-.personRow button:hover {
-    filter: brightness(0.95);
-}
-.countBadge {
-    padding: 2px 10px;
-    border-radius: 40px;
-    background-color: #bfffbf;
-    font-size: 0.85em;
-}
-.peopleEmpty {
-    padding: 5px 0;
-    color: #666666;
-    font-size: 0.9em;
-}
 .feedEmpty {
     padding: 2vh 5vw;
     color: #555555;
@@ -1167,23 +1090,323 @@ body.restoringPage main > section {
     display: block;
     margin: 1vh auto 0;
 }
-#friendsSection > img {
-    display: block;
-    margin: 0 auto 2vh;
-    height: 4vh;
-}
+/* ---- Friends tab ----
+   Two columns in one centred page: the people panel (search, requests, the
+   friend list) on the left, "Stories from your friends" on the right. */
 .friendsBackground {
     position: absolute;
     z-index: -999;
-    top: 9vh;
+    top: 0;
     right: 0;
     bottom: 0;
     left: 0;
-    background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
+    background-color: #f4f1ec;
 }
 #friendsSection {
     padding-top: 3vh;
 }
+.friendsPage {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px;
+    color: var(--navy);
+}
+.peoplePanel {
+    padding: 22px 20px 10px;
+    border: 1px solid #ebe6de;
+    border-radius: 16px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 16px rgba(10, 25, 54, 0.06);
+}
+main > section h2.peopleTitle {
+    margin-bottom: 16px;
+    text-align: left;
+    font-size: 1.45rem;
+    font-weight: 900;
+}
+.friendSearchForm {
+    display: flex;
+    gap: 10px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #ebe6de;
+}
+.friendSearchField {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 12px;
+    border: 1px solid #d9d4cc;
+    border-radius: 8px;
+    color: #8a8f99;
+}
+.friendSearchField:focus-within {
+    border-color: var(--navy);
+}
+.friendSearchField input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 0;
+    border: none;
+    outline: none;
+    background: none;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+.friendSearchForm button {
+    padding: 0 20px;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--navy);
+    color: #ffffff;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+.friendSearchForm button:hover {
+    background-color: var(--navy-hover);
+}
+#friendSearchResults:not(:empty) {
+    padding-top: 6px;
+    border-bottom: 1px solid #ebe6de;
+}
+.peopleBlock + .peopleBlock {
+    border-top: 1px solid #ebe6de;
+}
+.peopleBlock[open] {
+    padding-bottom: 10px;
+}
+.peoplePanel summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    list-style: none;
+    cursor: pointer;
+}
+/* The page-wide reset sets every element to 400, the spans included. */
+.peoplePanel summary span {
+    font-weight: 700;
+}
+.peoplePanel summary::-webkit-details-marker {
+    display: none;
+}
+.peopleChevron {
+    flex-shrink: 0;
+    font-size: 1.2rem;
+    transition: transform 0.2s ease-in-out;
+}
+.peopleBlock[open] .peopleChevron {
+    transform: rotate(180deg);
+}
+.peoplePanel h4 {
+    margin: 4px 0 2px;
+    color: #667085;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.peopleList {
+    list-style: none;
+}
+.personRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+}
+.personAvatar {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.personText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+.personName,
+.personNote {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.personName {
+    font-weight: 700;
+}
+.personNote {
+    color: #667085;
+    font-size: 0.8rem;
+}
+.personActions {
+    display: flex;
+    flex: none;
+    gap: 6px;
+}
+.personRow button {
+    padding: 7px 12px;
+    border: 1px solid #d9d4cc;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.personRow button:hover {
+    background-color: #f4f1ec;
+}
+.personRow .primaryButton {
+    border-color: var(--navy);
+    background-color: var(--navy);
+    color: #ffffff;
+}
+.personRow .primaryButton:hover {
+    background-color: var(--navy-hover);
+}
+.peopleEmpty {
+    padding: 4px 0 8px;
+    color: #667085;
+    font-size: 0.9rem;
+}
+main > section .friendFeedHeader h2 {
+    text-align: left;
+    font-size: 2.1rem;
+    font-weight: 900;
+    line-height: 1.15;
+}
+.friendFeedHeader p {
+    margin-top: 4px;
+    color: #4a5468;
+    font-size: 1.05rem;
+}
+.feedFilters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0;
+}
+.feedFilter {
+    padding: 10px 22px;
+    border: 1px solid #e3ded6;
+    border-radius: 10px;
+    background-color: #ffffff;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+.feedFilter:hover {
+    background-color: #ece8e1;
+}
+.feedFilter.active {
+    border-color: var(--navy);
+    background-color: var(--navy);
+    color: #ffffff;
+    font-weight: 700;
+}
+.friendStoryGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+}
+.friendFeed .feedEmpty {
+    padding: 8px 0;
+    text-align: left;
+}
+.friendStoryCard {
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    border: 1px solid #ebe6de;
+    border-radius: 12px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 16px rgba(10, 25, 54, 0.06);
+    cursor: pointer;
+    transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+.friendStoryCard:hover {
+    box-shadow: 0 10px 28px rgba(10, 25, 54, 0.14);
+    transform: translateY(-2px);
+}
+.friendStoryCard:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+.friendStoryCover {
+    position: relative;
+}
+.friendStoryCover .communityCover {
+    aspect-ratio: 4 / 3;
+    border-radius: 8px;
+}
+/* The bookmark sits on the picture's top-right corner in a white tile. */
+.friendStoryCover .bookmarkButton {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    background-color: #ffffffee;
+    box-shadow: 0 2px 6px rgba(10, 25, 54, 0.15);
+    font-size: 1.1rem;
+}
+.friendStoryCover .bookmarkButton:hover {
+    background-color: #ffffff;
+}
+.friendStoryBody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 4px 6px;
+}
+.friendStoryBody h4 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+.friendStoryBody .communityAuthor img {
+    width: 36px;
+    height: 36px;
+}
+.authorText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.authorText .author {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.storyDate {
+    color: #667085;
+    font-size: 0.78rem;
+}
+.friendStoryBody .summary {
+    color: #4a5468;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    /* Four lines at most, so the cards in a row line up. */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+
 /* ---- Community tab ----
    A left-aligned page in one centred column: the "Community" heading, a wide
    featured card (picture left, details right), then a two-column grid of
@@ -1590,6 +1813,20 @@ main > section h3.communityHeading {
     }
     .message-form {
         padding: 0 10px 10px;
+    }
+
+    /* ---- Friends tab on a phone ----
+       The people panel stacks above the stories; one card per row. */
+    .friendsPage {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        padding: 0 14px;
+    }
+    main > section .friendFeedHeader h2 {
+        font-size: 1.7rem;
+    }
+    .friendStoryGrid {
+        grid-template-columns: 1fr;
     }
 
     /* ---- Community tab on a phone ----

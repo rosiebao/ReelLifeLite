@@ -226,35 +226,57 @@
                     </div>
                 </section>
                 <section id="friendsSection" class="inactive s4">
-                    <img src="Friends.svg" alt="Friends" />
                     <div class="friendsBackground"></div>
-                    <div class="peoplePanel">
-                        <form id="friendSearchForm" class="friendSearchForm">
-                            <input id="friendSearchInput" type="search" placeholder="Find people by username" />
-                            <button type="submit">Search</button>
-                        </form>
-                        <ul id="friendSearchResults" class="peopleList"></ul>
-                        <p id="friendSearchEmpty" class="peopleEmpty hidden">No one by that name.</p>
-                        <details id="friendRequestsBlock">
-                            <summary>Friend requests <span id="friendRequestCount" class="countBadge">0</span></summary>
-                            <h4>Received</h4>
-                            <ul id="incomingRequests" class="peopleList"></ul>
-                            <p id="incomingRequestsEmpty" class="peopleEmpty">Nothing waiting on you.</p>
-                            <h4>Sent</h4>
-                            <ul id="outgoingRequests" class="peopleList"></ul>
-                            <p id="outgoingRequestsEmpty" class="peopleEmpty">You haven't asked anyone yet.</p>
-                        </details>
-                        <details id="friendListBlock">
-                            <summary>Your friends <span id="friendCount" class="countBadge">0</span></summary>
-                            <ul id="friendList" class="peopleList"></ul>
-                            <p id="friendListEmpty" class="peopleEmpty">No friends yet -- search for someone above.</p>
-                        </details>
+                    <div class="friendsPage">
+                        <!-- Left: people (friends.js). -->
+                        <aside class="peoplePanel">
+                            <h2 class="peopleTitle">Your Friends</h2>
+                            <form id="friendSearchForm" class="friendSearchForm">
+                                <label class="friendSearchField">
+                                    <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                                    <input id="friendSearchInput" type="search" placeholder="Username"
+                                        aria-label="Find people by username" />
+                                </label>
+                                <button type="submit">Search</button>
+                            </form>
+                            <ul id="friendSearchResults" class="peopleList"></ul>
+                            <p id="friendSearchEmpty" class="peopleEmpty hidden">No one by that name.</p>
+                            <details id="friendRequestsBlock" class="peopleBlock">
+                                <summary>
+                                    <span>Friend requests · <span id="friendRequestCount">0</span></span>
+                                    <ion-icon name="chevron-down-outline" class="peopleChevron" aria-hidden="true"></ion-icon>
+                                </summary>
+                                <ul id="incomingRequests" class="peopleList"></ul>
+                                <p id="incomingRequestsEmpty" class="peopleEmpty">Nothing waiting on you.</p>
+                                <h4 id="outgoingRequestsHeading" class="hidden">Sent</h4>
+                                <ul id="outgoingRequests" class="peopleList"></ul>
+                            </details>
+                            <details id="friendListBlock" class="peopleBlock">
+                                <summary>
+                                    <span>Your friends · <span id="friendCount">0</span></span>
+                                    <ion-icon name="chevron-down-outline" class="peopleChevron" aria-hidden="true"></ion-icon>
+                                </summary>
+                                <ul id="friendList" class="peopleList"></ul>
+                                <p id="friendListEmpty" class="peopleEmpty">No friends yet -- search for someone above.</p>
+                            </details>
+                        </aside>
+                        <!-- Right: their stories (stories.js). -->
+                        <div class="friendFeed">
+                            <div class="friendFeedHeader">
+                                <h2>Stories from your friends</h2>
+                                <p>Memories worth sharing.</p>
+                            </div>
+                            <div class="feedFilters" id="friendStoryFilters" role="group" aria-label="Show">
+                                <button type="button" class="feedFilter active" data-filter="all" aria-pressed="true">All stories</button>
+                                <button type="button" class="feedFilter" data-filter="recent" aria-pressed="false">Recent</button>
+                                <button type="button" class="feedFilter" data-filter="saved" aria-pressed="false">Saved</button>
+                            </div>
+                            <div class="friendStoryGrid" id="friendStories"></div>
+                            <p id="friendStoriesEmpty" class="feedEmpty">
+                                Nothing here yet. Add some friends, and their stories shared with friends will show up here.
+                            </p>
+                        </div>
                     </div>
-                    <h3>Stories from your friends</h3>
-                    <div class="friendsWrapper" id="friendStories"></div>
-                    <p id="friendStoriesEmpty" class="feedEmpty">
-                        Nothing here yet. Add some friends, and their stories shared with friends will show up here.
-                    </p>
                 </section>
                 <section id="communitySection" class="inactive s5">
                     <div class="communityBackground"></div>

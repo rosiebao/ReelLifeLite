@@ -15,8 +15,7 @@ const friendRequestCount = document.querySelector("#friendRequestCount");
 const incomingRequests = document.querySelector("#incomingRequests");
 const incomingRequestsEmpty = document.querySelector("#incomingRequestsEmpty");
 const outgoingRequests = document.querySelector("#outgoingRequests");
-const outgoingRequestsEmpty = document.querySelector("#outgoingRequestsEmpty");
-const friendListBlock = document.querySelector("#friendListBlock");
+const outgoingRequestsHeading = document.querySelector("#outgoingRequestsHeading");
 const friendCount = document.querySelector("#friendCount");
 const friendList = document.querySelector("#friendList");
 const friendListEmpty = document.querySelector("#friendListEmpty");
@@ -29,33 +28,56 @@ const RELATIONSHIP_LABELS = {
     request_received: "They asked you -- see requests below",
 };
 
-// A row with a name on the left and buttons on the right. `actions` is a list
-// of [label, className, handler]; an empty list gives a plain name row.
+// A row with an avatar, the name (and a smaller note under it) on the left and
+// buttons on the right. `actions` is a list of [label, className, handler]; an
+// empty list gives a plain name row. Accounts have no profile pictures yet, so
+// everyone gets the default one -- and email is never sent to other users, so
+// the note is a status line rather than an address.
 function personRow(username, actions = [], note = "") {
     const item = document.createElement("li");
     item.className = "personRow";
 
+    const avatar = document.createElement("img");
+    avatar.className = "personAvatar";
+    avatar.src = "profile.jpg";
+    avatar.alt = "";
+    item.appendChild(avatar);
+
+    const text = document.createElement("div");
+    text.className = "personText";
     const name = document.createElement("span");
     name.className = "personName";
     name.textContent = username;
-    item.appendChild(name);
-
+    text.appendChild(name);
     if (note) {
         const noteEl = document.createElement("span");
         noteEl.className = "personNote";
         noteEl.textContent = note;
-        item.appendChild(noteEl);
+        text.appendChild(noteEl);
     }
+    item.appendChild(text);
 
-    for (const [label, className, handler] of actions) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = className;
-        button.textContent = label;
-        button.addEventListener("click", handler);
-        item.appendChild(button);
+    if (actions.length) {
+        const buttons = document.createElement("div");
+        buttons.className = "personActions";
+        for (const [label, className, handler] of actions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = className;
+            button.textContent = label;
+            button.addEventListener("click", handler);
+            buttons.appendChild(button);
+        }
+        item.appendChild(buttons);
     }
     return item;
+}
+
+// "Mar 3, 2024" -- the date a request was sent.
+function shortDate(iso) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function friendsError(err) {
@@ -80,21 +102,31 @@ async function refreshRequests() {
     incomingRequests.innerHTML = "";
     for (const request of requests.incoming) {
         incomingRequests.appendChild(
-            personRow(request.user.username, [
-                ["Accept", "primaryButton", () => respondToRequest(request.friendship_id, "accept")],
-                ["Decline", "dangerButton", () => respondToRequest(request.friendship_id, "decline")],
-            ])
+            personRow(
+                request.user.username,
+                [
+                    ["Accept", "primaryButton", () => respondToRequest(request.friendship_id, "accept")],
+                    ["Decline", "secondaryButton", () => respondToRequest(request.friendship_id, "decline")],
+                ],
+                `Asked ${shortDate(request.created_at)}`
+            )
         );
     }
     incomingRequestsEmpty.classList.toggle("hidden", requests.incoming.length > 0);
 
+    // Requests you sent only get a heading (and a list) when there are some,
+    // so the panel stays as short as the mock-up's.
     outgoingRequests.innerHTML = "";
     for (const request of requests.outgoing) {
         outgoingRequests.appendChild(
-            personRow(request.user.username, [["Cancel", "dangerButton", () => removeFriend(request.user)]], "pending")
+            personRow(
+                request.user.username,
+                [["Cancel", "secondaryButton", () => removeFriend(request.user)]],
+                "Waiting for them to accept"
+            )
         );
     }
-    outgoingRequestsEmpty.classList.toggle("hidden", requests.outgoing.length > 0);
+    outgoingRequestsHeading.classList.toggle("hidden", requests.outgoing.length === 0);
 
     friendRequestCount.textContent = String(requests.incoming.length);
     // Requests waiting on the user are easy to miss behind a collapsed
@@ -112,11 +144,10 @@ async function refreshFriendList() {
 
     friendList.innerHTML = "";
     for (const friend of friends) {
-        friendList.appendChild(personRow(friend.username, [["Remove", "dangerButton", () => removeFriend(friend)]]));
+        friendList.appendChild(personRow(friend.username, [["Remove", "secondaryButton", () => removeFriend(friend)]]));
     }
     friendListEmpty.classList.toggle("hidden", friends.length > 0);
     friendCount.textContent = String(friends.length);
-    if (friends.length > 0) friendListBlock.open = true;
 }
 
 async function respondToRequest(friendshipId, action) {

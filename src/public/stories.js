@@ -309,6 +309,20 @@ storyReaderEditBtn.addEventListener("click", () => {
     openPublishModal(story.conversation_id);
 });
 
+// The Friends feed as the server last sent it (newest first), and which of the
+// "All stories / Recent / Saved" chips is picked, so switching chips -- or
+// un-saving a story while on "Saved" -- redraws without another request.
+const friendFeedState = { stories: [], filter: "all" };
+
+// "Recent" means published in the last month.
+const RECENT_STORY_DAYS = 30;
+
+const FRIEND_FEED_EMPTY = {
+    all: "Nothing here yet. Add some friends, and their stories shared with friends will show up here.",
+    recent: `None of your friends have shared a story in the last ${RECENT_STORY_DAYS} days.`,
+    saved: "No saved stories yet. Tap the bookmark on a story to keep it here.",
+};
+
 async function refreshFriendStories() {
     let stories = [];
     try {
@@ -316,8 +330,99 @@ async function refreshFriendStories() {
     } catch (err) {
         stories = [];
     }
-    renderCards(friendStoriesGrid, stories, "friendStory");
+    friendFeedState.stories = stories;
+    renderFriendStories();
+}
+
+function filteredFriendStories() {
+    const { stories, filter } = friendFeedState;
+    if (filter === "recent") {
+        const cutoff = Date.now() - RECENT_STORY_DAYS * 24 * 60 * 60 * 1000;
+        return stories.filter((story) => new Date(story.created_at).getTime() >= cutoff);
+    }
+    if (filter === "saved") {
+        const saved = savedStoryIds();
+        return stories.filter((story) => saved.includes(story.story_id));
+    }
+    return stories;
+}
+
+function renderFriendStories() {
+    const stories = filteredFriendStories();
+    friendStoriesGrid.innerHTML = "";
+    for (const story of stories) friendStoriesGrid.appendChild(friendStoryCard(story));
+    friendStoriesEmpty.textContent = FRIEND_FEED_EMPTY[friendFeedState.filter];
     show(friendStoriesEmpty, stories.length === 0);
+}
+
+document.querySelectorAll("#friendStoryFilters .feedFilter").forEach((chip) => {
+    chip.addEventListener("click", () => {
+        friendFeedState.filter = chip.dataset.filter;
+        document.querySelectorAll("#friendStoryFilters .feedFilter").forEach((other) => {
+            const active = other === chip;
+            other.classList.toggle("active", active);
+            other.setAttribute("aria-pressed", String(active));
+        });
+        renderFriendStories();
+    });
+});
+
+// "Apr 14, 2024".
+function storyDate(story) {
+    const date = new Date(story.created_at);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// One Friends card: a tall picture with the bookmark on its corner, then the
+// title, the author with the date under their name, and the summary.
+function friendStoryCard(story) {
+    const card = document.createElement("article");
+    card.className = "friendStoryCard";
+    card.tabIndex = 0;
+    card.setAttribute("aria-label", story.title);
+
+    const cover = document.createElement("div");
+    cover.className = "friendStoryCover";
+    cover.appendChild(communityCover(story));
+    // On "Saved", un-saving a story takes it off the page straight away.
+    cover.appendChild(
+        bookmarkButton(story, () => {
+            if (friendFeedState.filter === "saved") renderFriendStories();
+        })
+    );
+    card.appendChild(cover);
+
+    const body = document.createElement("div");
+    body.className = "friendStoryBody";
+
+    const title = document.createElement("h4");
+    title.textContent = story.title;
+    body.appendChild(title);
+
+    const author = communityAuthor(story);
+    const nameBlock = document.createElement("span");
+    nameBlock.className = "authorText";
+    nameBlock.appendChild(author.querySelector(".author"));
+    const date = document.createElement("span");
+    date.className = "storyDate";
+    date.textContent = storyDate(story);
+    nameBlock.appendChild(date);
+    author.appendChild(nameBlock);
+    body.appendChild(author);
+
+    const blurb = communityBlurb(story);
+    if (blurb) body.appendChild(blurb);
+    card.appendChild(body);
+
+    card.addEventListener("click", () => openStoryReader(story.story_id));
+    card.addEventListener("keydown", (event) => {
+        if (event.target === card && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            openStoryReader(story.story_id);
+        }
+    });
+    return card;
 }
 
 // The featured slot holds the earliest public story, so it stays put as new
@@ -455,7 +560,8 @@ function communityBlurb(story) {
     return blurb;
 }
 
-function bookmarkButton(story) {
+// `onChange` runs after the saved state flips.
+function bookmarkButton(story, onChange = null) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "bookmarkButton";
@@ -478,6 +584,7 @@ function bookmarkButton(story) {
         event.stopPropagation();
         setStorySaved(story.story_id, !savedStoryIds().includes(story.story_id));
         paint();
+        if (onChange) onChange();
     });
     return button;
 }
