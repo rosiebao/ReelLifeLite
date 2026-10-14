@@ -240,8 +240,10 @@ newTestConversationBtn.addEventListener("click", async () => {
     }
     await refreshTestConversations();
     await selectTestConversation(conversationId);
-    // The "Answer mode" picker decides how this interview is answered.
-    setHandsFree(answerModeSelect.value === "handsFree");
+    // The "Answer mode" picker decides how this interview is answered: Speak
+    // opens the microphone, Type doesn't. Either way each interview starts
+    // with hands-free off; the ✋ button above the chat turns it on.
+    setHandsFree(false);
 
     try {
         const { question } = await withInterviewer(conversationId, () =>
@@ -442,7 +444,9 @@ function setHandsFree(on) {
 
 // ---- Answer mode (the Story Companion card) ----
 
-// Remembered on this device, like the voice toggle (voiceOutput.js).
+// Remembered on this device, like the voice toggle (voiceOutput.js). Just
+// "speak" or "type"; a "handsFree" saved before that option was removed
+// counts as "speak".
 const ANSWER_MODE_KEY = "reellife_answer_mode";
 const answerModeSelect = document.querySelector("#answerModeSelect");
 
@@ -455,7 +459,8 @@ function saveAnswerMode() {
 }
 
 try {
-    const saved = localStorage.getItem(ANSWER_MODE_KEY);
+    let saved = localStorage.getItem(ANSWER_MODE_KEY);
+    if (saved === "handsFree") saved = "speak";
     if ([...answerModeSelect.options].some((option) => option.value === saved)) answerModeSelect.value = saved;
 } catch (err) {
     // Keep the default.
@@ -563,11 +568,14 @@ if (dictation) {
 
     handsFreeBtn.addEventListener("click", () => {
         setHandsFree(!handsFree);
-        if (handsFree) startMicrophone();
-        // Keep the picker in step, so the next interview starts the same way.
-        if (handsFree) answerModeSelect.value = "handsFree";
-        else if (answerModeSelect.value === "handsFree") answerModeSelect.value = "speak";
-        saveAnswerMode();
+        if (handsFree) {
+            startMicrophone();
+            // Hands-free is a way of speaking, so the picker follows along.
+            if (answerModeSelect.value !== "speak") {
+                answerModeSelect.value = "speak";
+                saveAnswerMode();
+            }
+        }
     });
 } else {
     micBtn.classList.add("hidden");
