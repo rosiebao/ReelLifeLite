@@ -17,12 +17,16 @@ const { router: draftsRouter } = require('./drafts');
 const { router: familyRouter } = require('./family');
 const { router: friendsRouter } = require('./friends');
 const { router: interviewRouter } = require('./interview');
+const { router: profileRouter } = require('./profile');
 const { router: storiesRouter } = require('./stories');
 const { ApiError } = require('./errors');
 
 const app = express();
 const PORT = process.env.PORT || 6767;
 
+// A profile photo (up to 5 MB) arrives base64-encoded in JSON, which makes it
+// about a third bigger; everything else keeps express's 100 KB default.
+app.use('/profile/photo', express.json({ limit: '8mb' }));
 app.use(express.json());
 app.use(authRouter);
 app.use(conversationsRouter);
@@ -30,12 +34,22 @@ app.use(draftsRouter);
 app.use(familyRouter);
 app.use(friendsRouter);
 app.use(interviewRouter);
+app.use(profileRouter);
 app.use(storiesRouter);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((err, req, res, next) => {
     if (err instanceof ApiError) {
         res.status(err.status).json({ error: err.message });
+        return;
+    }
+    // body-parser's own errors (too large, malformed JSON) carry a 4xx status.
+    if (err?.type === 'entity.too.large') {
+        res.status(413).json({ error: 'That upload is too large' });
+        return;
+    }
+    if (err?.type === 'entity.parse.failed') {
+        res.status(400).json({ error: 'Request body is not valid JSON' });
         return;
     }
     console.error(err);

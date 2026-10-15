@@ -37,6 +37,7 @@ interview.js      /conversations/{id}/interview/* -- the Story tab's interview
 interviewer.js    what the interviewer says: Claude on AWS Bedrock, or canned
                    questions when that isn't switched on
 friends.js        /friends, /users/search -- the friend graph
+profile.js        /profile, /profile/photo, /users/{id}/profile -- the profile page
 stories.js        /stories -- publishing a conversation for others to read
 db.js             node:sqlite connection + schema (CREATE TABLE IF NOT EXISTS)
 security.js       password hashing + session token helpers
@@ -234,6 +235,27 @@ friends, the Friends tab) or `public` (everyone, the Community tab).
 Feed endpoints leave `content` out -- cards only need the title and summary,
 so the full text is fetched per story.
 
+### Profile
+
+The profile page's details, on top of the login ones. Every field is
+optional; location and email are hidden from other people until switched on.
+
+- `GET /profile` -- your own profile: `username`, `email`, `first_name`,
+  `last_name`, `location`, `bio`, `photo_url`, `profile_visibility`
+  (`friends` | `community`), `show_location`, `show_email`, `created_at`
+- `PUT /profile` -- any of those fields (except `photo_url`/`created_at`);
+  only the ones sent change. Username and email follow `/signup`'s rules
+  (`409` if taken); the new email is the one to log in with.
+- `PUT /profile/photo` -- `{"filename", "data_base64"}`, JPG or PNG (checked by
+  the file's bytes), up to 5 MB (`413` beyond). Replaces and deletes the old
+  one. Stored under `MEDIA_ROOT/profile_photos/` with a random name.
+- `DELETE /profile/photo` -- back to the default picture
+- `GET /profile-photos/{name}` -- the image itself (no login: `<img>` can't
+  send the token, so the random name is what keeps it private)
+- `GET /users/{id}/profile` -- someone else's profile. `friends` profiles are
+  `404` to anyone who isn't a friend; `location`/`email` are `null` unless
+  they're switched on.
+
 ### Friends
 
 One row per request, in the direction it was sent, flipped to `accepted` when
@@ -256,8 +278,9 @@ the other side agrees. Declining deletes the row, so the pair can try again.
 - `public/storage_api.js` -- the only place that calls the API (token storage
   + fetch wrapper); `login.html`/`index.html`'s scripts all go through it
 - `public/login.html` + `loginScript.js` -- login/signup form
-- `public/index.html` + `profile.js` -- profile page, guarded behind a valid
-  session
+- `public/index.html` + `profile.js` -- the session gate for the page, and the
+  profile tab: photo, personal details (Save/Cancel) and visibility settings
+  (which save as soon as they change)
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
   mode, start an interview, answer (typed or out loud), skip a question, and
   "End" to have it written up as a story in the publish dialog, all through `/interview`

@@ -106,17 +106,6 @@ function settingLine(story) {
     return line;
 }
 
-function bylineLine(story) {
-    const byline = document.createElement("p");
-    byline.className = "byAuthor";
-    byline.append("By ");
-    const author = document.createElement("span");
-    author.className = "author";
-    author.textContent = story.author;
-    byline.appendChild(author);
-    return byline;
-}
-
 // Who can read one of your own stories, in place of the "By you" byline.
 function visibilityLine(story) {
     const line = document.createElement("p");
@@ -125,42 +114,6 @@ function visibilityLine(story) {
     badge.textContent = VISIBILITY_LABELS[story.visibility] || story.visibility;
     line.appendChild(badge);
     return line;
-}
-
-// `className` picks up the existing card styling: .friendStory in the Friends
-// grid (and the Me tab). The Community tab builds its own cards (communityCard
-// below). `own` swaps the byline for who the story is shared with.
-function storyCard(story, className, { own = false } = {}) {
-    const card = document.createElement("div");
-    card.className = className;
-
-    const photo = document.createElement("img");
-    photo.src = story.photo || "profile.jpg";
-    photo.alt = "";
-    card.appendChild(photo);
-
-    const title = document.createElement("h3");
-    title.textContent = story.title;
-    card.appendChild(title);
-
-    if (story.tags.length) {
-        const tags = document.createElement("p");
-        tags.className = "tags";
-        tags.append(...tagElements(story.tags));
-        card.appendChild(tags);
-    }
-
-    const setting = settingLine(story);
-    if (setting) card.appendChild(setting);
-    card.appendChild(own ? visibilityLine(story) : bylineLine(story));
-
-    card.addEventListener("click", () => openStoryReader(story.story_id));
-    return card;
-}
-
-function renderCards(container, stories, className, options) {
-    container.innerHTML = "";
-    for (const story of stories) container.appendChild(storyCard(story, className, options));
 }
 
 // ---- Feeds ----
@@ -176,7 +129,8 @@ async function refreshMyStories() {
         stories = [];
     }
     storyState.myStories = stories;
-    renderCards(myStoriesGrid, stories, "friendStory", { own: true });
+    myStoriesGrid.innerHTML = "";
+    for (const story of stories) myStoriesGrid.appendChild(friendStoryCard(story, { own: true }));
     show(myStoriesEmpty, stories.length === 0);
     // A story open in the Story tab's reader may have just been edited or
     // unpublished: show the new version, or go back to the empty state.
@@ -375,8 +329,10 @@ function storyDate(story) {
 }
 
 // One Friends card: a tall picture with the bookmark on its corner, then the
-// title, the author with the date under their name, and the summary.
-function friendStoryCard(story) {
+// title, the author with the date under their name, and the summary. `own`
+// (the profile page's "My stories") swaps the bookmark and the author for the
+// date and who the story is shared with.
+function friendStoryCard(story, { own = false } = {}) {
     const card = document.createElement("article");
     card.className = "friendStoryCard";
     card.tabIndex = 0;
@@ -386,11 +342,13 @@ function friendStoryCard(story) {
     cover.className = "friendStoryCover";
     cover.appendChild(communityCover(story));
     // On "Saved", un-saving a story takes it off the page straight away.
-    cover.appendChild(
-        bookmarkButton(story, () => {
-            if (friendFeedState.filter === "saved") renderFriendStories();
-        })
-    );
+    if (!own) {
+        cover.appendChild(
+            bookmarkButton(story, () => {
+                if (friendFeedState.filter === "saved") renderFriendStories();
+            })
+        );
+    }
     card.appendChild(cover);
 
     const body = document.createElement("div");
@@ -400,16 +358,26 @@ function friendStoryCard(story) {
     title.textContent = story.title;
     body.appendChild(title);
 
-    const author = communityAuthor(story);
-    const nameBlock = document.createElement("span");
-    nameBlock.className = "authorText";
-    nameBlock.appendChild(author.querySelector(".author"));
-    const date = document.createElement("span");
-    date.className = "storyDate";
-    date.textContent = storyDate(story);
-    nameBlock.appendChild(date);
-    author.appendChild(nameBlock);
-    body.appendChild(author);
+    if (own) {
+        const meta = visibilityLine(story);
+        meta.className = "ownStoryMeta";
+        const date = document.createElement("span");
+        date.className = "storyDate";
+        date.textContent = storyDate(story);
+        meta.appendChild(date);
+        body.appendChild(meta);
+    } else {
+        const author = communityAuthor(story);
+        const nameBlock = document.createElement("span");
+        nameBlock.className = "authorText";
+        nameBlock.appendChild(author.querySelector(".author"));
+        const date = document.createElement("span");
+        date.className = "storyDate";
+        date.textContent = storyDate(story);
+        nameBlock.appendChild(date);
+        author.appendChild(nameBlock);
+        body.appendChild(author);
+    }
 
     const blurb = communityBlurb(story);
     if (blurb) body.appendChild(blurb);

@@ -223,6 +223,26 @@ if (!storyDraftColumns.some((column) => column.name === "details")) {
     db.exec("ALTER TABLE story_drafts ADD COLUMN details TEXT");
 }
 
+// The profile page (profile.js): everything past the login details. All of it
+// arrived after the users table did, so an existing app.db gets the columns
+// added. `photo` is a file name under MEDIA_ROOT/profile_photos, never a path.
+// Location and email stay hidden from other people until switched on.
+const userColumns = db.prepare("PRAGMA table_info(users)").all();
+for (const [name, definition] of [
+    ["first_name", "TEXT"],
+    ["last_name", "TEXT"],
+    ["location", "TEXT"],
+    ["bio", "TEXT"],
+    ["photo", "TEXT"],
+    ["profile_visibility", "TEXT NOT NULL DEFAULT 'friends'"],
+    ["show_location", "INTEGER NOT NULL DEFAULT 0"],
+    ["show_email", "INTEGER NOT NULL DEFAULT 0"],
+]) {
+    if (!userColumns.some((column) => column.name === name)) {
+        db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+    }
+}
+
 // Friend graph. One row per request, in the direction it was sent; a
 // friendship is that row once status flips to 'accepted', which is why every
 // "are these two friends" check has to look at both directions. Declining

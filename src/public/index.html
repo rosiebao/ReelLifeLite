@@ -53,17 +53,119 @@
             </header>
             <main>
                 <section id="selfSection" class="inactive s1">
-                    <div class="selfBackground">
-                        <h2 id="username">Me</h2>
-                        <h3 id="email">Email</h3>
-                    </div>
-                    <img src="profile.jpg" alt="profile" id="profilePicture" />
-                    <div class="myStoriesBlock">
-                        <h3>My stories</h3>
-                        <div class="friendsWrapper" id="myStories"></div>
-                        <p id="myStoriesEmpty" class="feedEmpty">
-                            You haven't published anything yet. Publish a story from the Story tab and it'll show up here.
-                        </p>
+                    <div class="selfBackground"></div>
+                    <div class="profilePage">
+                        <div class="profileHeader">
+                            <h2>Your Profile</h2>
+                            <p>Share a little about yourself.</p>
+                            <span id="memberSince" class="memberSince hidden">
+                                <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                                <span id="memberSinceText"></span>
+                            </span>
+                        </div>
+                        <div class="profileGrid">
+                            <div class="profileMain">
+                                <!-- Photo, name, @username and the "about you" line. -->
+                                <div class="profileCard profileIdentity">
+                                    <div class="profilePhotoBlock">
+                                        <img src="profile.jpg" alt="Your profile photo" id="profilePicture" />
+                                        <label class="changePhotoButton">
+                                            <ion-icon name="camera" aria-hidden="true"></ion-icon>
+                                            Change photo
+                                            <input type="file" id="profilePhotoInput" accept="image/jpeg,image/png" />
+                                        </label>
+                                        <p class="photoHint">JPG or PNG · Up to 5 MB</p>
+                                        <p id="photoError" class="profileError hidden" role="alert"></p>
+                                    </div>
+                                    <div class="profileIdentityText">
+                                        <h3 id="profileDisplayName">Me</h3>
+                                        <p id="profileHandle" class="profileHandle"></p>
+                                        <p id="profileTagline" class="profileTagline"></p>
+                                    </div>
+                                </div>
+                                <form id="profileForm" class="profileCard profileForm" novalidate>
+                                    <h3>Personal details</h3>
+                                    <p class="profileCardSubtitle">Keep your profile up to date.</p>
+                                    <div class="profileNameRow">
+                                        <label>First name
+                                            <input id="profileFirstName" type="text" maxlength="50" autocomplete="given-name" />
+                                        </label>
+                                        <label>Last name
+                                            <input id="profileLastName" type="text" maxlength="50" autocomplete="family-name" />
+                                        </label>
+                                    </div>
+                                    <label class="profileRow">
+                                        <span>Username</span>
+                                        <input id="profileUsername" type="text" maxlength="30" autocomplete="username" />
+                                    </label>
+                                    <label class="profileRow">
+                                        <span>Email address</span>
+                                        <span class="profileEmailField">
+                                            <input id="profileEmail" type="email" autocomplete="email" />
+                                            <span class="verifiedBadge" title="The address you sign in with">
+                                                <ion-icon name="checkmark-circle" aria-hidden="true"></ion-icon>
+                                                Sign-in email
+                                            </span>
+                                        </span>
+                                    </label>
+                                    <label class="profileRow">
+                                        <span>Location</span>
+                                        <input id="profileLocation" type="text" maxlength="100" placeholder="Seattle, WA" />
+                                    </label>
+                                    <label class="profileRow">
+                                        <span>About you</span>
+                                        <textarea id="profileBio" rows="3" maxlength="500"
+                                            placeholder="A line or two about you and the stories you tell"></textarea>
+                                    </label>
+                                    <p id="profileFormError" class="profileError hidden" role="alert"></p>
+                                    <div class="profileFormActions">
+                                        <span id="profileSaved" class="profileSaved hidden" aria-live="polite">Saved</span>
+                                        <button type="button" id="profileCancelBtn" class="profileSecondary">Cancel</button>
+                                        <button type="submit" id="profileSaveBtn" class="profilePrimary">Save changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <aside class="profileCard profileVisibility">
+                                <h3>Profile visibility</h3>
+                                <p class="profileCardSubtitle">Choose who can see your profile.</p>
+                                <div class="visibilityOptions" role="radiogroup" aria-label="Who can see your profile">
+                                    <label class="visibilityOption">
+                                        <input type="radio" name="profileVisibility" value="friends" />
+                                        <span class="visibilityText">
+                                            <strong>Friends &amp; family</strong>
+                                            <small>Visible to people you connect with.</small>
+                                        </span>
+                                    </label>
+                                    <label class="visibilityOption">
+                                        <input type="radio" name="profileVisibility" value="community" />
+                                        <span class="visibilityText">
+                                            <strong>Community</strong>
+                                            <small>Visible to all ReelLife members.</small>
+                                        </span>
+                                    </label>
+                                </div>
+                                <label class="switchRow">
+                                    <span>Show location</span>
+                                    <input type="checkbox" id="profileShowLocation" class="switch" role="switch" />
+                                </label>
+                                <label class="switchRow">
+                                    <span>Show email</span>
+                                    <input type="checkbox" id="profileShowEmail" class="switch" role="switch" />
+                                </label>
+                                <p id="visibilityError" class="profileError hidden" role="alert"></p>
+                                <p class="profileNote">
+                                    <ion-icon name="information-circle" aria-hidden="true"></ion-icon>
+                                    <span>Your stories keep their own sharing settings.</span>
+                                </p>
+                            </aside>
+                        </div>
+                        <div class="myStoriesBlock">
+                            <h3>My stories</h3>
+                            <div class="friendStoryGrid" id="myStories"></div>
+                            <p id="myStoriesEmpty" class="feedEmpty">
+                                You haven't published anything yet. Publish a story from the Story tab and it'll show up here.
+                            </p>
+                        </div>
                     </div>
                 </section>
                 <section id="familySection" class="inactive s2">

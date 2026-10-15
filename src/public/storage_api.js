@@ -100,6 +100,21 @@ const storageApi = {
     return apiFetch("/whoami");
   },
 
+  // ---- Profile ----
+
+  getProfile() {
+    return apiFetch("/profile");
+  },
+
+  // Only the fields passed are changed.
+  updateProfile(changes) {
+    return apiFetch("/profile", { method: "PUT", body: changes });
+  },
+
+  uploadProfilePhoto({ filename, dataBase64 }) {
+    return apiFetch("/profile/photo", { method: "PUT", body: { filename, data_base64: dataBase64 } });
+  },
+
   isLoggedIn() {
     return Boolean(tokenStore.get());
   },
