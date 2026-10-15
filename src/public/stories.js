@@ -264,16 +264,12 @@ storyReaderEditBtn.addEventListener("click", () => {
 });
 
 // The Friends feed as the server last sent it (newest first), and which of the
-// "All stories / Recent / Saved" chips is picked, so switching chips -- or
+// "All stories / Saved" chips is picked, so switching chips -- or
 // un-saving a story while on "Saved" -- redraws without another request.
 const friendFeedState = { stories: [], filter: "all" };
 
-// "Recent" means published in the last month.
-const RECENT_STORY_DAYS = 30;
-
 const FRIEND_FEED_EMPTY = {
     all: "Nothing here yet. Add some friends, and their stories shared with friends will show up here.",
-    recent: `None of your friends have shared a story in the last ${RECENT_STORY_DAYS} days.`,
     saved: "No saved stories yet. Tap the bookmark on a story to keep it here.",
 };
 
@@ -290,10 +286,6 @@ async function refreshFriendStories() {
 
 function filteredFriendStories() {
     const { stories, filter } = friendFeedState;
-    if (filter === "recent") {
-        const cutoff = Date.now() - RECENT_STORY_DAYS * 24 * 60 * 60 * 1000;
-        return stories.filter((story) => new Date(story.created_at).getTime() >= cutoff);
-    }
     if (filter === "saved") {
         const saved = savedStoryIds();
         return stories.filter((story) => saved.includes(story.story_id));
