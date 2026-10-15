@@ -203,12 +203,6 @@ body:has(#selfSection.active) .avatarButton {
     border-color: var(--gold);
     background-color: var(--navy-hover);
 }
-#familySection {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 3vh;
-}
 #headerLogoutButton {
     padding: 8px 16px;
     border: 1px solid #ffffff66;
@@ -255,9 +249,6 @@ main {
 main > section h2, main > section h3 {
     text-align: center;
 }
-#familySection > img {
-    height: 5vh;
-}
 #logoutButton {
     display: block;
     margin: 2vh auto 0;
@@ -269,161 +260,6 @@ main > section h2, main > section h3 {
 }
 #logoutButton:hover {
     background-color: #ffa0a0;
-}
-.familyTree {
-    display: grid;
-    /* The control column keeps a usable width on a phone, where 10vw is only
-       about 38px; the members take whatever is left. minmax(0, ...) on the
-       first column matters: a plain 1fr won't shrink past its content, so a
-       crowded row would push the controls off the side of the screen. */
-    grid-template-columns: minmax(0, 1fr) minmax(44px, 10vw);
-}
-.familyBackground {
-    position: absolute;
-    z-index: -999;
-    top: 10vh;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    background-image: linear-gradient(45deg, #98d7ff, #f4f1ec 20%, #f4f1ec 50%,#f87964);
-}
-.treeContainer {
-    position: absolute;
-    width: 100%;
-    top: 10vh;
-}
-.familyTreeRow {
-    display: flex;
-    flex-direction: row;
-    grid-column: 1;
-    justify-content: space-evenly;
-    height: calc(40px + 10vmin);
-}
-/* One stack of controls per row, in the tree's narrow right-hand column:
-   add a member, add a row above or below, remove the row. */
-.familyRowControls {
-    grid-column: 2;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 2px 0;
-}
-.familyRowControls > button {
-    flex: 1 1 0;
-    /* Four buttons won't fit a phone-height row at a tappable size, so let the
-       stack push the grid row taller instead of shrinking below this. */
-    min-height: 24px;
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    background-color: #dfdfdf;
-    color: #333333;
-    font-size: 11px;
-    line-height: 1;
-    cursor: pointer;
-}
-.familyRowControls > button:hover {
-    background-color: #cccccc;
-}
-.familyRowControls > button:active {
-    background-color: #afafaf;
-}
-/* The destructive one reads red on the way down. */
-.familyRowControls > .familyRowRemove:hover {
-    background-color: #ffbfbf;
-}
-.familyRowControls > .familyRowRemove:active {
-    background-color: #ff9f9f;
-}
-.familyTreeRow > h3 {
-    text-align: center;
-}
-.familyTreeRow {
-    border-top: 1px solid #dbdbdb;
-}
-.familyTree img {
-    width: 10vmin;
-    height: 10vmin;
-    display: block;
-    margin: 0 auto;
-    border-radius: 100%;
-}
-.familyMember {
-    position: relative;
-}
-/* Keeps a long name from running underneath the remove button. */
-.familyMember > h3 {
-    padding-right: 22px;
-}
-#familySection > h3 {
-    font-style: italic;
-    color: #5e180c;
-    font-size: min(1.2em, 1.5vh);
-}
-.familyMemberRemove {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    line-height: 1;
-    border: none;
-    border-radius: 100%;
-    background-color: #dfdfdf;
-    color: #444444;
-    cursor: pointer;
-}
-.familyMemberRemove:hover {
-    background-color: #ffbfbf;
-}
-.familyMemberRemove:active {
-    background-color: #ff9f9f;
-}
-.familyTreeEmpty {
-    grid-column: 1 / -1;
-    padding: 3vh 8vw;
-    text-align: center;
-    /* Near-black rather than a muted grey: this sits over the background
-       photo, where grey-on-bright fails contrast. */
-    color: #2b2b2b;
-}
-/* An empty tree has no rows to hang controls off, so it carries its own. */
-.familyTreeEmptyAdd {
-    grid-column: 1 / -1;
-    justify-self: center;
-    width: 30vw;
-    max-width: 200px;
-    height: 5vh;
-    border: none;
-    border-radius: 10px;
-    background-color: #dfdfdf;
-    color: #333333;
-    cursor: pointer;
-}
-.familyTreeEmptyAdd:hover {
-    background-color: #cccccc;
-}
-.familyTreeEmptyAdd:active {
-    background-color: #afafaf;
-}
-.familyTree ~ button {
-    display: block;
-    width: 20vw;
-    height: 5vh;
-    margin: 0 auto;
-    margin-top: 5vh;
-    border-radius: 2em;
-    border: none;
-    background-color: #2b2b2b;
-    color: #ffffff;
-    cursor: pointer;
-}
-.familyTree ~ button:hover {
-    background-color: #3b3b3b;
-}
-.familyTree ~ button:active {
-    background-color: #4b4b4b;
 }
 .friendsWrapper {
     display: grid;
@@ -782,11 +618,6 @@ main > section .storyReaderHeading h3 {
     background-position: center;
     z-index: -100;
 }
-.familyTreeRow {
-    background-color: #ffffff88;
-    backdrop-filter: blur(10px);
-    margin-top: 2vh;
-}
 .hidden {
     display: none;
 }
@@ -1082,6 +913,652 @@ body.restoringPage main > section {
     display: block;
     margin: 1vh auto 0;
 }
+/* ---- Family tab ----
+   A header card (title, Add member / Invite family, the Members drop-down)
+   over two columns: the tree, one gold band per generation with its controls
+   on the right, and the detail panel for whoever is selected. Same cream page
+   and white cards as Friends, Community and Profile. */
+.familyBackground {
+    position: absolute;
+    z-index: -999;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: #f4f1ec;
+}
+.familyPage {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 3vh 32px 0;
+    color: var(--navy);
+}
+.familyHeaderCard,
+.familyTreeCard,
+.familyDetail {
+    border: 1px solid #ebe6de;
+    border-radius: 16px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 16px rgba(10, 25, 54, 0.06);
+}
+.familyHeaderCard {
+    padding: 20px 22px 16px;
+}
+.familyHeaderTop {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+main > section .familyHeaderText h2 {
+    text-align: left;
+    font-size: 2.1rem;
+    font-weight: 900;
+    line-height: 1.15;
+}
+.familyHeaderText p {
+    margin-top: 4px;
+    color: #4a5468;
+    font-size: 1.05rem;
+}
+.familyHeaderActions {
+    display: flex;
+    flex: none;
+    gap: 12px;
+}
+.familyHeaderAction {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+.familyHeaderAction > span {
+    color: #667085;
+    font-size: 0.78rem;
+}
+.familyHeaderAction button {
+    min-width: 180px;
+}
+.familyPrimaryButton,
+.familySecondaryButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 11px 20px;
+    border: 1.5px solid var(--navy);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+}
+.familyPrimaryButton span,
+.familySecondaryButton span {
+    font-weight: 700;
+}
+.familyPrimaryButton {
+    background-color: var(--navy);
+    color: #ffffff;
+}
+.familyPrimaryButton:hover {
+    background-color: var(--navy-hover);
+}
+.familySecondaryButton {
+    background-color: #ffffff;
+    color: var(--navy);
+}
+.familySecondaryButton:hover {
+    background-color: #f4f1ec;
+}
+.familyPrimaryButton ion-icon,
+.familySecondaryButton ion-icon {
+    flex: none;
+    font-size: 1.2rem;
+}
+.familyLinkButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: #4a5468;
+    font-family: inherit;
+    font-size: 0.85rem;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.familyLinkButton:hover {
+    color: var(--navy);
+}
+.familyLinkButton.danger:hover {
+    color: #b42318;
+}
+.familyLinkButton.hidden {
+    display: none;
+}
+.familyPrimaryButton:focus-visible,
+.familySecondaryButton:focus-visible,
+.familyLinkButton:focus-visible,
+.familyCard:focus-visible,
+.familyRowButton:focus-visible,
+.familyListRow:focus-visible,
+.familyMembersBlock summary:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+
+/* The Members drop-down, under the title. */
+.familyMembersBlock {
+    margin-top: 16px;
+    border: 1px solid #ebe6de;
+    border-radius: 10px;
+}
+.familyMembersBlock summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    list-style: none;
+    cursor: pointer;
+}
+.familyMembersBlock summary::-webkit-details-marker {
+    display: none;
+}
+.familyMembersBlock summary > span,
+.familyMembersBlock summary > span span {
+    flex: 1;
+    font-weight: 700;
+}
+.familyMembersBlock summary ion-icon {
+    flex: none;
+    font-size: 1.25rem;
+}
+.familyChevron {
+    transition: transform 0.2s ease-in-out;
+}
+.familyMembersBlock[open] .familyChevron {
+    transform: rotate(180deg);
+}
+.familyMemberList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 4px 12px;
+    padding: 0 10px 10px;
+    list-style: none;
+}
+.familyListRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--navy);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.familyListRow:hover {
+    background-color: #f4f1ec;
+}
+.familyListPhoto {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.familyListText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+.familyListName,
+.familyListRelation {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.familyListName {
+    font-weight: 700;
+}
+.familyListRelation {
+    color: #667085;
+    font-size: 0.8rem;
+}
+.familyListEmpty {
+    padding: 6px;
+    color: #667085;
+}
+
+/* Little status pills: on a card, in the list, and under a name in the panel. */
+.familyStatus {
+    display: inline-block;
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.familyStatus.not_invited {
+    border: 1px solid #f5c2c0;
+    background-color: #fde8e7;
+    color: #b42318;
+}
+.familyStatus.invited {
+    border: 1px solid #f0d49b;
+    background-color: #fdf3e1;
+    color: #8a5a00;
+}
+.familyStatus.joined {
+    border: 1px solid #b7e1c8;
+    background-color: #e7f6ed;
+    color: #1d6b3f;
+}
+.familyStatus.self {
+    border: 1px solid #f0d49b;
+    background-color: #fbe7c4;
+    color: #5a4316;
+}
+
+.familyGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+    align-items: start;
+    gap: 16px;
+}
+.familyTreeCard {
+    min-width: 0;
+    padding: 20px 20px 14px;
+}
+main > section .familyTreeCard h3 {
+    text-align: left;
+    font-size: 1.6rem;
+    font-weight: 900;
+}
+.familyTreeSubtitle {
+    margin: 2px 0 14px;
+    color: #4a5468;
+    font-size: 0.92rem;
+}
+.familyTreeLoading {
+    padding: 4vh 0;
+    color: #667085;
+    text-align: center;
+}
+.familyTreeFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+}
+.familyNote {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: #4a5468;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+.familyNote ion-icon {
+    flex: none;
+    margin-top: 1px;
+    font-size: 1.05rem;
+}
+
+/* The tree: one band per generation, its controls in a column on the right.
+   The connector lines are an SVG under the cards (family.js draws them). */
+.familyTree {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: opacity 0.2s ease-in-out;
+}
+.familyTree.saving {
+    opacity: 0.7;
+    pointer-events: none;
+}
+.familyLines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    overflow: visible;
+    pointer-events: none;
+}
+.familyLines line {
+    stroke: #8d8577;
+    stroke-width: 1.5;
+}
+.familyBand {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #f0dfba;
+    border-radius: 12px;
+    background-color: #fdf7ea;
+}
+.familyBandMain {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    padding: 34px 14px 16px;
+}
+.familyBandLabel {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    /* Over the connector lines, which can pass behind it. */
+    z-index: 2;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background-color: #f7e5bd;
+    color: #5a4316;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+.familyBandMembers {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-evenly;
+    gap: 14px 28px;
+}
+/* Above the lines, so a line never runs across a card. */
+.familyCard {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 200px;
+    padding: 10px 12px;
+    border: 1px solid #e6dfd2;
+    border-radius: 10px;
+    background-color: #ffffff;
+    color: var(--navy);
+    font-family: inherit;
+    text-align: left;
+    box-shadow: 0 2px 6px rgba(10, 25, 54, 0.05);
+    cursor: pointer;
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+.familyCard:hover {
+    border-color: #d8c49a;
+}
+.familyCard.isSelf {
+    border: 2px solid var(--gold);
+    background-color: #fffaf0;
+}
+.familyCard.selected {
+    border-color: var(--navy);
+    box-shadow: 0 0 0 2px var(--navy);
+}
+.familyCard.isSelf.selected {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px var(--gold), 0 4px 12px rgba(232, 163, 61, 0.25);
+}
+/* Four or more to a generation: photo above the name. */
+.familyCard.compact {
+    flex-direction: column;
+    gap: 6px;
+    width: 128px;
+    padding: 10px 8px;
+    text-align: center;
+}
+.familyCardPhoto {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.familyCard.compact .familyCardPhoto {
+    width: 50px;
+    height: 50px;
+}
+.familyCardText {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+.familyCard.compact .familyCardText {
+    align-items: center;
+}
+.familyCardName,
+.familyCardRelation {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.familyCardName {
+    font-size: 0.98rem;
+    font-weight: 700;
+}
+.familyCard.compact .familyCardName {
+    font-size: 0.85rem;
+}
+.familyCardRelation {
+    color: #667085;
+    font-size: 0.78rem;
+}
+.familyBandEmpty {
+    position: relative;
+    z-index: 2;
+    padding: 14px 18px;
+    border: 1.5px dashed #d8c49a;
+    border-radius: 10px;
+    background: none;
+    color: #5a4316;
+    font-family: inherit;
+    cursor: pointer;
+}
+.familyBandEmpty:hover {
+    background-color: #fbf0d8;
+}
+.familyRowControls {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 96px;
+    padding: 8px 8px 8px 12px;
+    border-left: 1px solid #f0dfba;
+}
+.familyRowButton {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #e6dfd2;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.familyRowButton ion-icon {
+    flex: none;
+    font-size: 0.95rem;
+}
+.familyRowButton:hover:not(:disabled) {
+    background-color: #f4f1ec;
+}
+.familyRowButton:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.familyTreeEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 5vh 0;
+    color: #4a5468;
+}
+
+/* The panel beside the tree: whoever is selected. */
+.familyDetail {
+    position: sticky;
+    top: calc(var(--nav-height) + 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px 20px;
+}
+.familyDetailHead {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+.familyDetailPhoto {
+    width: 92px;
+    height: 92px;
+    margin-bottom: 8px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 4px 14px rgba(10, 25, 54, 0.15);
+}
+main > section h3.familyDetailName {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: left;
+    font-size: 1.6rem;
+    font-weight: 900;
+}
+.familyDetailRelation {
+    color: #4a5468;
+}
+.familyDetailHead .familyStatus {
+    margin-top: 6px;
+    font-size: 0.8rem;
+}
+.familyDetailRule {
+    border: none;
+    border-top: 1px solid #ebe6de;
+}
+.familyDetailText {
+    color: #3c4558;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+.familyDetailInvite {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.familyDetailInvite .familyPrimaryButton,
+.familyDetailInvite .familySecondaryButton {
+    width: 100%;
+}
+.familyField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+.familyField span {
+    font-weight: 700;
+}
+.familyField input {
+    padding: 10px 12px;
+    border: 1px solid #d9d4cc;
+    border-radius: 8px;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.92rem;
+}
+.familyField input:focus {
+    border-color: var(--navy);
+    outline: none;
+}
+.familyError {
+    color: #b42318;
+    font-size: 0.85rem;
+}
+.familyDetailMessage {
+    color: #1d6b3f;
+    font-size: 0.85rem;
+}
+.familyDetailActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    padding-top: 10px;
+    border-top: 1px solid #ebe6de;
+}
+
+/* The add / edit dialog and the invitation prompt. */
+.familyModal .modalCard {
+    color: var(--navy);
+}
+.familyModal h3 {
+    margin-bottom: 4px;
+    font-size: 1.35rem;
+    font-weight: 900;
+}
+.familyModalIntro {
+    margin-bottom: 1.5vh;
+    color: #4a5468;
+    line-height: 1.45;
+}
+.familyModalIntro.hidden {
+    display: none;
+}
+/* `.publishForm label` and `.publishRow` set display: flex, which outranks
+   .hidden -- so the Friend, Related to and Email fields need this to come and
+   go by mode. */
+.familyModal .publishForm label.hidden,
+.familyModal .publishForm .publishRow.hidden {
+    display: none;
+}
+/* Side-by-side fields share the row evenly; a long option ("Grandma (Mom's
+   mother)") would otherwise stretch its select past the dialog on a phone. */
+.familyModal .publishRow label {
+    min-width: 0;
+}
+.familyModal .publishRow select,
+.familyModal .publishRow input {
+    width: 100%;
+    min-width: 0;
+    text-overflow: ellipsis;
+}
+.familyModalHint {
+    color: #667085;
+    font-size: 0.85em;
+}
+.familyModal .familyLinkButton {
+    align-self: flex-start;
+}
+.familyModal .modalActions button[type="submit"],
+.familyModal .modalActions .primaryButton {
+    background-color: var(--navy);
+    color: #ffffff;
+}
+.familyModal .modalActions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
 /* ---- Friends tab ----
    Two columns in one centred page: the people panel (search, requests, the
    friend list) on the left, "Stories from your friends" on the right. */
@@ -2000,6 +2477,16 @@ main > section h3.communityHeading {
         right: 10px;
     }
 }
+/* Family tab, tablet: the detail panel moves under the tree. */
+@media (max-width: 1000px) {
+    .familyGrid {
+        grid-template-columns: 1fr;
+    }
+    .familyDetail {
+        position: static;
+    }
+}
+
 /* Phone: one slim row -- logo on the left, a hamburger on the right. The
    hamburger drops the page links, Profile and Log out down in a panel under
    the bar (script.js toggles .menuOpen on the header). */
@@ -2219,6 +2706,87 @@ main > section h3.communityHeading {
     }
     .profileEmailField {
         flex-wrap: wrap;
+    }
+
+    /* ---- Family tab on a phone ----
+       The header buttons share a row under the title, each band puts its
+       controls in a strip underneath, and the cards shrink to fit two or
+       three across. */
+    .familyPage {
+        padding: 2vh 14px 0;
+    }
+    .familyHeaderTop {
+        flex-direction: column;
+        gap: 14px;
+    }
+    main > section .familyHeaderText h2 {
+        font-size: 1.7rem;
+    }
+    .familyHeaderActions {
+        width: 100%;
+    }
+    .familyHeaderAction {
+        flex: 1;
+        min-width: 0;
+    }
+    .familyHeaderAction button {
+        width: 100%;
+        min-width: 0;
+        padding: 10px 12px;
+    }
+    .familyTreeCard {
+        padding: 16px 10px 12px;
+    }
+    /* Two cards to a line, couples get split up, and the controls sit
+       between the bands -- the lines would cross all of it. The bands, top
+       to bottom, already say who comes before whom. */
+    .familyLines {
+        display: none;
+    }
+    .familyBand {
+        flex-direction: column;
+    }
+    .familyBandMain {
+        padding: 34px 8px 14px;
+    }
+    .familyBandMembers {
+        gap: 12px 10px;
+    }
+    .familyCard,
+    .familyCard.compact {
+        flex-direction: column;
+        gap: 6px;
+        width: calc(50% - 10px);
+        max-width: 150px;
+        padding: 10px 6px;
+        text-align: center;
+    }
+    .familyCard .familyCardText {
+        align-items: center;
+    }
+    .familyCardPhoto,
+    .familyCard.compact .familyCardPhoto {
+        width: 48px;
+        height: 48px;
+    }
+    .familyRowControls {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        width: auto;
+        padding: 8px;
+        border-top: 1px solid #f0dfba;
+        border-left: none;
+    }
+    .familyRowButton {
+        padding: 6px 8px;
+    }
+    .familyTreeFooter {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .familyMemberList {
+        grid-template-columns: 1fr;
     }
 
     /* ---- Friends tab on a phone ----

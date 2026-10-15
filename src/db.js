@@ -144,6 +144,30 @@ if (!familyMemberColumns.some((column) => column.name === "is_self")) {
     `);
 }
 
+// The Family page's detail panel and invitations (family.js). All of these
+// arrived after the table did, so an existing app.db gets them added.
+//   relationship    what this person is to the tree's owner ("Sister")
+//   email           where the owner wants the invitation sent
+//   linked_user_id  the ReelLife account this member is: a friend picked with
+//                   "Add member", or whoever accepted the invitation
+//   invite_token    the secret in the invite link; cleared once it's accepted
+//   invited_at      when an invitation was last created (sent or copied)
+const familyMemberColumnsNow = db.prepare("PRAGMA table_info(family_members)").all();
+for (const [name, definition] of [
+    ["relationship", "TEXT"],
+    ["email", "TEXT"],
+    ["linked_user_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL"],
+    ["invite_token", "TEXT"],
+    ["invited_at", "TEXT"],
+]) {
+    if (!familyMemberColumnsNow.some((column) => column.name === name)) {
+        db.exec(`ALTER TABLE family_members ADD COLUMN ${name} ${definition}`);
+    }
+}
+db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS family_members_invite_token ON family_members (invite_token) WHERE invite_token IS NOT NULL"
+);
+
 // Records that a user's tree has been set up, so the starting layout is only
 // ever applied to a genuinely new account. Without this, a user who deletes
 // every row looks identical to one who has never opened the tab, and the

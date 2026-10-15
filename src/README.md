@@ -37,6 +37,7 @@ interview.js      /conversations/{id}/interview/* -- the Story tab's interview
 interviewer.js    what the interviewer says: Claude on AWS Bedrock, or canned
                    questions when that isn't switched on
 friends.js        /friends, /users/search -- the friend graph
+family.js         /family -- the Family tab's tree, and family invitations
 profile.js        /profile, /profile/photo, /users/{id}/profile -- the profile page
 stories.js        /stories -- publishing a conversation for others to read
 db.js             node:sqlite connection + schema (CREATE TABLE IF NOT EXISTS)
@@ -256,6 +257,32 @@ optional; location and email are hidden from other people until switched on.
   `404` to anyone who isn't a friend; `location`/`email` are `null` unless
   they're switched on.
 
+### Family
+
+Your family tree: `rows` is a list of generations, top (oldest) first, each
+a list of `members`. Each member has `member_id`, `name`, `relationship`
+("Sister"), `email`, `is_self` (your own node, only one) and, from the
+server, `photo_url` (your profile photo for your own node, the linked
+account's for someone on ReelLife), `status` (`self`, `joined`, `invited`,
+`not_invited`) and `linked_user` (`{id, username}` once they're on ReelLife).
+
+- `GET /family` -> `{"rows", "seeded"}`. `seeded` is false until the first
+  save, which is how the page knows to start a new account off with a tree.
+- `PUT /family` -- the whole tree. Send `member_id` back for members already
+  saved and they're updated in place, even if they moved to another
+  generation; members left out are removed (with their invitation). A member
+  can be linked to an account with `linked_user_id`, but only to one of your
+  friends (an existing link is always kept), and only once per tree.
+- `POST /family/members/{id}/invite` -- `{"email"?}` -> `{"token", "member"}`.
+  Makes an invitation, or returns the existing one so a link already sent
+  keeps working. The page turns the token into `index.html?invite=<token>`
+  and opens the user's email app (there's no mail server), or copies it.
+  `409` once they've joined.
+- `GET /family/invites/{token}` -- who it's from and which member it is, plus
+  `own` when it's your own invitation; `404` for a used or cancelled link.
+- `POST /family/invites/{token}/accept` -- links your account to that member
+  and makes the two of you friends. The link is then used up.
+
 ### Friends
 
 One row per request, in the direction it was sent, flipped to `accepted` when
@@ -281,6 +308,13 @@ the other side agrees. Declining deletes the row, so the pair can try again.
 - `public/index.html` + `profile.js` -- the session gate for the page, and the
   profile tab: photo, personal details (Save/Cancel) and visibility settings
   (which save as soon as they change)
+- `public/family.js` -- the Family tab: the tree (one band per generation,
+  with + Member / − Member / + Layer / × Layer beside it), the panel for the
+  selected person (invite by email or link), Add member (a friend already on
+  ReelLife) and Invite family (someone new). Adding asks who they're related
+  to (the selected person to start with) and how, and works out their
+  generation and relationship to you from that. Also offers an invitation link
+  that was opened (`?invite=`; `authGuard.js` keeps it across signing in)
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
   mode, start an interview, answer (typed or out loud), skip a question, and
   "End" to have it written up as a story in the publish dialog, all through `/interview`

@@ -169,65 +169,58 @@
                     </div>
                 </section>
                 <section id="familySection" class="inactive s2">
-                    <img src="Family.svg" alt="Family" />
-                    <h3>Your Family Tree</h3>
                     <div class="familyBackground"></div>
-                    <div class="treeContainer">
-                        <div class="familyTree">
-                            <div class="familyTreeRow R1">
-                                <div class="familyMember r1 c1">
-                                    <h3>Grandma (moms side)
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
+                    <!-- Drawn by family.js from GET /family. -->
+                    <div class="familyPage">
+                        <div class="familyHeaderCard">
+                            <div class="familyHeaderTop">
+                                <div class="familyHeaderText">
+                                    <h2>Your Family</h2>
+                                    <p>Manage your family tree and invite loved ones to join.</p>
                                 </div>
-                                <div class="familyMember r1 c2">
-                                    <h3>Grandpa (moms side)
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
-                                </div>
-                                <div class="familyMember r1 c3">
-                                    <h3>Grandma (dads side)
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
-                                </div>
-                                <div class="familyMember r1 c4">
-                                    <h3>Grandpa (dads side)
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
-                                </div>
-                            </div>
-                            <button class="familyTreeRowAddBtn AR1">
-                                Add
-                            </button>
-                            <div class="familyTreeRow R2">
-                                <div class="familyMember r2 c1">
-                                    <h3>Mom
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
-                                </div>
-                                <div class="familyMember r2 c2">
-                                    <h3>Dad
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
+                                <div class="familyHeaderActions">
+                                    <div class="familyHeaderAction">
+                                        <button type="button" id="addFamilyMemberBtn" class="familyPrimaryButton">
+                                            <ion-icon name="person-add-outline" aria-hidden="true"></ion-icon>
+                                            <span>Add member</span>
+                                        </button>
+                                        <span>Already on ReelLife</span>
+                                    </div>
+                                    <div class="familyHeaderAction">
+                                        <button type="button" id="inviteFamilyBtn" class="familySecondaryButton">
+                                            <ion-icon name="mail-outline" aria-hidden="true"></ion-icon>
+                                            <span>Invite family</span>
+                                        </button>
+                                        <span>New to ReelLife</span>
+                                    </div>
                                 </div>
                             </div>
-                            <button class="familyTreeRowAddBtn AR2">
-                                Add
-                            </button>
-                            <div class="familyTreeRow R3">
-                                <div class="familyMember r3 c1" data-self>
-                                    <h3>Me
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
-                                </div>
-                                <div class="familyMember r3 c2">
-                                    <h3>Sister
-                                        <img src="profile.jpg" alt="profile" />
-                                    </h3>
-                                </div>
-                            </div>
+                            <details class="familyMembersBlock">
+                                <summary>
+                                    <ion-icon name="people-outline" aria-hidden="true"></ion-icon>
+                                    <span>Members · <span id="familyMemberCount">0</span></span>
+                                    <ion-icon name="chevron-down-outline" class="familyChevron" aria-hidden="true"></ion-icon>
+                                </summary>
+                                <ul id="familyMemberList" class="familyMemberList"></ul>
+                            </details>
                         </div>
-                        <button id="resetTree">Reset Tree</button>
+                        <div class="familyGrid">
+                            <div class="familyTreeCard">
+                                <h3>Our Family Tree</h3>
+                                <p class="familyTreeSubtitle">Shared tree · Your view</p>
+                                <div id="familyTree" class="familyTree" aria-busy="true">
+                                    <p class="familyTreeLoading">Loading your family tree…</p>
+                                </div>
+                                <div class="familyTreeFooter">
+                                    <p class="familyNote">
+                                        <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                                        <span>Add or remove members and generations.</span>
+                                    </p>
+                                    <button type="button" id="resetTree" class="familyLinkButton">Start over</button>
+                                </div>
+                            </div>
+                            <aside id="familyDetail" class="familyDetail" aria-live="polite"></aside>
+                        </div>
                     </div>
                 </section>
                 <section id="tellYourStorySection" class="active s3">
@@ -443,6 +436,69 @@
                         <button type="submit" id="publishSubmitBtn">Publish</button>
                     </div>
                 </form>
+            </div>
+        </div>
+        <!-- Family page (family.js): adding or editing someone in the tree. -->
+        <div id="familyMemberModal" class="modalOverlay familyModal hidden" role="dialog" aria-modal="true"
+            aria-labelledby="familyModalTitle">
+            <div class="modalCard">
+                <h3 id="familyModalTitle">Add a family member</h3>
+                <p id="familyModalIntro" class="familyModalIntro"></p>
+                <form id="familyMemberForm" class="publishForm" novalidate>
+                    <label id="familyFriendField" class="hidden">Friend
+                        <select id="familyFriendSelect"></select>
+                        <span id="familyFriendEmpty" class="familyModalHint hidden">
+                            None of your friends are left to add. Add friends on the Friends page, or invite
+                            someone new instead.
+                        </span>
+                    </label>
+                    <label>Name
+                        <input id="familyNameInput" type="text" maxlength="100" autocomplete="off" />
+                    </label>
+                    <!-- Who they're related to in the tree (the selected person to start
+                         with). Picking both fills in the generation and "Relationship to you". -->
+                    <div id="familyRelatedField" class="publishRow">
+                        <label>Related to
+                            <select id="familyRelatedToSelect"></select>
+                        </label>
+                        <label>As their
+                            <select id="familyRelatedAsSelect"></select>
+                        </label>
+                    </div>
+                    <div class="publishRow">
+                        <label>Relationship to you
+                            <input id="familyRelationshipInput" type="text" maxlength="50" placeholder="Sister"
+                                autocomplete="off" />
+                        </label>
+                        <label id="familyGenerationField">Generation
+                            <select id="familyGenerationSelect"></select>
+                        </label>
+                    </div>
+                    <label id="familyEmailField"><span>Email address (optional)</span>
+                        <input id="familyEmailInput" type="email" maxlength="254" placeholder="name@example.com"
+                            autocomplete="off" />
+                    </label>
+                    <button type="button" id="familyModalSwitch" class="familyLinkButton"></button>
+                    <p id="familyModalError" class="publishError hidden" role="alert"></p>
+                    <div class="modalActions">
+                        <span class="modalSpacer"></span>
+                        <button type="button" id="familyModalCancel">Cancel</button>
+                        <button type="submit" id="familyModalSubmit">Add to tree</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- Family page: opening someone's invitation link (index.html?invite=...). -->
+        <div id="familyInviteModal" class="modalOverlay familyModal hidden" role="dialog" aria-modal="true"
+            aria-labelledby="familyInviteTitle">
+            <div class="modalCard">
+                <h3 id="familyInviteTitle">You've been invited</h3>
+                <p id="familyInviteText" class="familyModalIntro"></p>
+                <div class="modalActions">
+                    <span class="modalSpacer"></span>
+                    <button type="button" id="familyInviteDismiss">Not now</button>
+                    <button type="button" id="familyInviteAccept" class="primaryButton">Join their tree</button>
+                </div>
             </div>
         </div>
         <div id="storyModal" class="modalOverlay hidden">

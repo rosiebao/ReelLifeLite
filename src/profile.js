@@ -208,4 +208,4 @@ router.get("/users/:id/profile", requireAuth, (req, res) => {
     });
 });
 
-module.exports = { router, MAX_PHOTO_BYTES };
+module.exports = { router, MAX_PHOTO_BYTES, photoUrl };

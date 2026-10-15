@@ -199,4 +199,4 @@ router.delete("/friends/:userId", requireAuth, (req, res) => {
     res.json({ ok: true });
 });
 
-module.exports = { router, friendIdsOf, areFriends, relationshipTo };
+module.exports = { router, friendRow, friendIdsOf, areFriends, relationshipTo };

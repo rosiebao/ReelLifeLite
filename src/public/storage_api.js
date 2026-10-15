@@ -188,7 +188,8 @@ const storageApi = {
   },
 
   // ---- Family tree ----
-  // Both return the caller's own tree: { rows: [ { members: [ { name, photo } ] } ] }.
+  // Both return the caller's own tree:
+  // { rows: [ { members: [ { member_id, name, photo_url, relationship, status, ... } ] } ], seeded }.
 
   getFamily() {
     return apiFetch("/family");
@@ -196,6 +197,19 @@ const storageApi = {
 
   saveFamily(tree) {
     return apiFetch("/family", { method: "PUT", body: tree });
+  },
+
+  // -> { token, member }. `changes` may carry the { email } it's being sent to.
+  inviteFamilyMember(memberId, changes = {}) {
+    return apiFetch(`/family/members/${memberId}/invite`, { method: "POST", body: changes });
+  },
+
+  getFamilyInvite(token) {
+    return apiFetch(`/family/invites/${encodeURIComponent(token)}`);
+  },
+
+  acceptFamilyInvite(token) {
+    return apiFetch(`/family/invites/${encodeURIComponent(token)}/accept`, { method: "POST" });
   },
 
   // ---- Stories ----
