@@ -168,6 +168,10 @@ All endpoints below (except `/signup`, `/login`) require
 - `POST /conversations` -> `201 {"conversation_id": ...}`
 - `GET /conversations` -- list the caller's conversations
 - `GET /conversations/{id}` -- a single conversation (404 if it isn't yours)
+- `DELETE /conversations/{id}` -- delete an interview for good: its prompts,
+  the drafts written from it, and its transcript and media on disk. A story
+  published from it stays up (unpublish it with `DELETE /stories/{id}`); its
+  `conversation_id` becomes `null`. 404 if it isn't yours
 - `GET /conversations/{id}/prompts` -- that conversation's prompts, oldest first
 - `POST /conversations/{id}/prompts` -- `{"content", "input_media_filename"?,
   "input_media_base64"?}` -> `201 {"prompt_id": ...}`
@@ -317,7 +321,9 @@ the other side agrees. Declining deletes the row, so the pair can try again.
   that was opened (`?invite=`; `authGuard.js` keeps it across signing in)
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
   mode, start an interview, answer (typed or out loud), skip a question, and
-  "End" to have it written up as a story in the publish dialog, all through `/interview`
+  "End" to have it written up as a story in the publish dialog, all through `/interview`.
+  An interview is deleted with the trash button beside End, or on its row
+  under "Your Interviews"
 - `public/voiceInput.js` -- answering out loud with the browser's speech
   recognition (Chrome, Edge, Safari); dictates into the answer box with a live
   caption, and the mic button hides where it isn't supported. Restarts itself

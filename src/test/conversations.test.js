@@ -212,3 +212,78 @@ test("saveMedia is exported and usable directly", () => {
     const p = saveMedia(1, "x.txt", Buffer.from("hi").toString("base64"));
     assert.equal(fs.readFileSync(p, "utf8"), "hi");
 });
+
+// ---- Deleting an interview ----
+
+test("delete conversation removes its prompts, drafts and files", async () => {
+    const token = await signupAndLogin("deleter", "deleter@example.com");
+    const conversationId = (await request("POST", "/conversations", { token })).body.conversation_id;
+    const transcript = (await request("GET", `/conversations/${conversationId}`, { token })).body.conversation;
+    await request("POST", `/conversations/${conversationId}/prompts`, {
+        token,
+        body: {
+            content: "with a file",
+            input_media_filename: "note.txt",
+            input_media_base64: Buffer.from("x").toString("base64"),
+        },
+    });
+    const media = (await request("GET", `/conversations/${conversationId}/prompts`, { token })).body[0].input_media;
+    const userId = db.prepare("SELECT user_id FROM conversation WHERE conversation_id = ?").get(conversationId).user_id;
+    db.prepare(
+        "INSERT INTO story_drafts (user_id, conversation_id, content, created_at) VALUES (?, ?, 'draft', ?)"
+    ).run(userId, conversationId, new Date().toISOString());
+    assert.ok(fs.existsSync(transcript));
+    assert.ok(fs.existsSync(media));
+
+    const deleted = await request("DELETE", `/conversations/${conversationId}`, { token });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(deleted.body, { ok: true });
+
+    assert.equal((await request("GET", `/conversations/${conversationId}`, { token })).status, 404);
+    assert.equal((await request("GET", `/conversations/${conversationId}/prompts`, { token })).status, 404);
+    const list = (await request("GET", "/conversations", { token })).body;
+    assert.ok(!list.some((c) => c.conversation_id === conversationId));
+    const count = (sql) => db.prepare(sql).get(conversationId).n;
+    assert.equal(count("SELECT COUNT(*) AS n FROM prompts WHERE conversation_id = ?"), 0);
+    assert.equal(count("SELECT COUNT(*) AS n FROM story_drafts WHERE conversation_id = ?"), 0);
+    assert.ok(!fs.existsSync(transcript));
+    assert.ok(!fs.existsSync(path.dirname(transcript)));
+
+    // Deleting again is a 404, as for any conversation that isn't there.
+    assert.equal((await request("DELETE", `/conversations/${conversationId}`, { token })).status, 404);
+});
+
+test("delete conversation leaves its published story up, unlinked", async () => {
+    const token = await signupAndLogin("publisher", "publisher@example.com");
+    const conversationId = (await request("POST", "/conversations", { token })).body.conversation_id;
+    await request("POST", `/conversations/${conversationId}/prompts`, { token, body: { content: "once upon a time" } });
+    const story = await request("POST", "/stories", {
+        token,
+        body: { conversation_id: conversationId, title: "My story", visibility: "public" },
+    });
+    assert.equal(story.status, 201);
+
+    assert.equal((await request("DELETE", `/conversations/${conversationId}`, { token })).status, 200);
+
+    const kept = await request("GET", `/stories/${story.body.story_id}`, { token });
+    assert.equal(kept.status, 200);
+    assert.equal(kept.body.title, "My story");
+    assert.equal(kept.body.content, "once upon a time");
+    assert.equal(kept.body.conversation_id, null);
+    const community = (await request("GET", "/stories/community", { token })).body;
+    assert.ok(community.some((s) => s.story_id === story.body.story_id));
+});
+
+test("cannot delete another user's conversation", async () => {
+    const token = await signupAndLogin("keeper", "keeper@example.com");
+    const otherToken = await signupAndLogin("intruder", "intruder@example.com");
+    const conversationId = (await request("POST", "/conversations", { token })).body.conversation_id;
+    await request("POST", `/conversations/${conversationId}/prompts`, { token, body: { content: "mine" } });
+
+    assert.equal((await request("DELETE", `/conversations/${conversationId}`, { token: otherToken })).status, 404);
+    assert.equal((await request("DELETE", `/conversations/${conversationId}`)).status, 401);
+
+    const prompts = await request("GET", `/conversations/${conversationId}/prompts`, { token });
+    assert.equal(prompts.status, 200);
+    assert.equal(prompts.body.length, 1);
+});

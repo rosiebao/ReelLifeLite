@@ -47,6 +47,7 @@ const voiceToggleBtn = document.querySelector("#voiceToggleBtn");
 const handsFreeBtn = document.querySelector("#handsFreeBtn");
 const skipQuestionBtn = document.querySelector("#skipQuestionBtn");
 const endInterviewBtn = document.querySelector("#endInterviewBtn");
+const deleteInterviewBtn = document.querySelector("#deleteInterviewBtn");
 
 function errorText(err) {
     return err.detail || err.message || "Something went wrong";
@@ -109,8 +110,9 @@ function longDate(value) {
 
 // One row in a Story-tab drawer ("Your Stories" / "Your Interviews"): a title
 // and a "Topic · date" line, opened by click or Enter. Shared with stories.js
-// so the two lists look and behave the same.
-function drawerItem({ title, meta, selected = false, onOpen }) {
+// so the two lists look and behave the same. With `onDelete` the row also gets
+// a trash button (its own button, so it never opens the row as well).
+function drawerItem({ title, meta, selected = false, onOpen, onDelete, deleteLabel }) {
     const item = document.createElement("li");
     item.className = "drawerItem";
     item.classList.toggle("selected", selected);
@@ -126,9 +128,28 @@ function drawerItem({ title, meta, selected = false, onOpen }) {
     line.textContent = meta;
     item.appendChild(line);
 
+    if (onDelete) {
+        item.classList.add("hasDelete");
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "drawerItemDelete";
+        remove.title = deleteLabel || "Delete";
+        remove.setAttribute("aria-label", deleteLabel || "Delete");
+        const trash = document.createElement("ion-icon");
+        trash.setAttribute("name", "trash-outline");
+        trash.setAttribute("aria-hidden", "true");
+        remove.appendChild(trash);
+        remove.addEventListener("click", (event) => {
+            event.stopPropagation();
+            onDelete();
+        });
+        remove.addEventListener("keydown", (event) => event.stopPropagation());
+        item.appendChild(remove);
+    }
+
     item.addEventListener("click", onOpen);
     item.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") onOpen();
+        if (event.key === "Enter" && event.target === item) onOpen();
     });
     return item;
 }
@@ -159,6 +180,8 @@ function renderConversationList() {
                 meta: conversationMeta(conversation),
                 selected: conversation.conversation_id === testState.selectedConversationId,
                 onOpen: () => selectTestConversation(conversation.conversation_id),
+                onDelete: () => deleteInterview(conversation.conversation_id),
+                deleteLabel: `Delete ${conversationTitle(conversation)}`,
             })
         );
     }
@@ -203,6 +226,7 @@ function setBusy(busy) {
     testSendBtn.disabled = busy;
     skipQuestionBtn.disabled = busy;
     endInterviewBtn.disabled = busy;
+    deleteInterviewBtn.disabled = busy;
     // Hands-free: an answer finished while the interviewer was busy goes out
     // as soon as it's free, rather than waiting for the Send button.
     if (!busy && autoSendWaiting) {
@@ -350,6 +374,53 @@ function closeTestConversation() {
     testEmptyState.classList.remove("hidden");
     renderConversationList();
 }
+
+// Deletes an interview for good (after asking): every question and answer,
+// the drafts written from it and its transcript. A story published from it
+// stays up -- the question says so -- and is unpublished on its own. Not while
+// the interviewer is working on this interview, so a reply can't land in one
+// that's gone.
+async function deleteInterview(conversationId) {
+    if (sessionEnded) return;
+    const conversation = testState.conversations.find((c) => c.conversation_id === conversationId);
+    if (!conversation) return;
+    if (testState.busy && stillSelected(conversationId)) {
+        alert("Wait for the interviewer to finish, then delete the interview.");
+        return;
+    }
+
+    const published = (storyState.myStories || []).some((story) => story.conversation_id === conversationId);
+    const keeps = published
+        ? "\n\nThe story you published from it stays up. Unpublish it from Your Stories if you want it gone too."
+        : "";
+    if (!confirm(`Delete "${conversationTitle(conversation)}"? All of its questions and answers will be gone for good.${keeps}`)) {
+        return;
+    }
+
+    deleteInterviewBtn.disabled = true;
+    try {
+        await storageApi.deleteConversation(conversationId);
+    } catch (err) {
+        if (sessionExpired(err)) return;
+        // Already gone (deleted in another tab): carry on and drop it here too.
+        if (err.status !== 404) {
+            alert(`Couldn't delete the interview: ${errorText(err)}`);
+            return;
+        }
+    } finally {
+        deleteInterviewBtn.disabled = false;
+    }
+
+    if (stillSelected(conversationId)) closeTestConversation();
+    await refreshTestConversations();
+    // Its story (if any) no longer points back to it, so the reader drops
+    // "Edit story" and the drawers redraw without the interview's topic.
+    if (typeof refreshStoryFeeds === "function") refreshStoryFeeds();
+}
+
+deleteInterviewBtn.addEventListener("click", () => {
+    if (testState.selectedConversationId !== null) deleteInterview(testState.selectedConversationId);
+});
 
 async function answerWasSaved(conversationId, answer) {
     try {

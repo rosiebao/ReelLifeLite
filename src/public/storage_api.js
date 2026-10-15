@@ -133,6 +133,12 @@ const storageApi = {
     return apiFetch(`/conversations/${conversationId}`);
   },
 
+  // For good: its answers, drafts and transcript. A story published from it
+  // stays up (unpublish that separately).
+  deleteConversation(conversationId) {
+    return apiFetch(`/conversations/${conversationId}`, { method: "DELETE" });
+  },
+
   getPrompts(conversationId) {
     return apiFetch(`/conversations/${conversationId}/prompts`);
   },

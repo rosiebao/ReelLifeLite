@@ -22,6 +22,14 @@ function transcriptPath(conversationId) {
     return path.join(conversationDir(conversationId), "transcript.txt");
 }
 
+// Everything on disk for one conversation (transcript and media), for when
+// it's deleted. Never creates the folder, and a missing one is fine.
+function removeConversationFiles(conversationId) {
+    const id = Number(conversationId);
+    if (!Number.isInteger(id) || id <= 0) return;
+    fs.rmSync(path.join(mediaRoot, String(id)), { recursive: true, force: true });
+}
+
 function appendTranscript(conversationId, line) {
     fs.appendFileSync(transcriptPath(conversationId), line + "\n", "utf8");
 }
@@ -37,4 +45,4 @@ function saveMedia(conversationId, filename, base64Data) {
     return filePath;
 }
 
-module.exports = { conversationDir, transcriptPath, appendTranscript, saveMedia, setMediaRoot };
+module.exports = { conversationDir, transcriptPath, appendTranscript, saveMedia, setMediaRoot, removeConversationFiles };

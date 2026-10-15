@@ -462,6 +462,31 @@ main > section .companionCard h3 {
     font-size: 0.8rem;
     color: #667085;
 }
+/* A row with a trash button: the text keeps clear of it on the right. */
+.drawerItem.hasDelete {
+    position: relative;
+    padding-right: 44px;
+}
+.drawerItemDelete {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    padding: 6px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: #98a2b3;
+    font-size: 1rem;
+    cursor: pointer;
+}
+.drawerItemDelete:hover,
+.drawerItemDelete:focus-visible {
+    background-color: #fef2f2;
+    color: #ef4444;
+}
 /* Hidden on screen, still read out (the Story tab's page heading). */
 .srOnly {
     position: absolute;
@@ -679,6 +704,23 @@ body.restoringPage main > section {
 }
 .endButton:hover {
     background-color: #fef2f2;
+}
+/* Beside End: deletes the open interview (testChat.js). */
+.deleteInterviewButton {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px;
+    border: none;
+    border-radius: 10px;
+    background: none;
+    color: #98a2b3;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.deleteInterviewButton:hover,
+.deleteInterviewButton:focus-visible {
+    background-color: #fef2f2;
+    color: #ef4444;
 }
 .messageActions {
     display: flex;

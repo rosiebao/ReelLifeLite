@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const { db } = require("./db");
 const { ApiError } = require("./errors");
 const { requireAuth } = require("./auth");
-const { transcriptPath, appendTranscript, saveMedia } = require("./storage");
+const { transcriptPath, appendTranscript, saveMedia, removeConversationFiles } = require("./storage");
 
 const router = express.Router();
 
@@ -81,6 +81,36 @@ router.get("/conversations", requireAuth, (req, res) => {
 
 router.get("/conversations/:id", requireAuth, (req, res) => {
     res.json(ownedConversation(Number(req.params.id), req.user.id));
+});
+
+// Deletes an interview for good: its questions and answers, the drafts
+// written from it, and its transcript and media on disk. A story published
+// from it stays up -- it's a separate copy other people may be reading, with
+// its own Unpublish -- and just loses its link back to the interview.
+router.delete("/conversations/:id", requireAuth, (req, res) => {
+    const { conversation_id: conversationId } = ownedConversation(Number(req.params.id), req.user.id);
+
+    db.exec("BEGIN");
+    try {
+        db.prepare("UPDATE stories SET conversation_id = NULL WHERE conversation_id = ?").run(conversationId);
+        db.prepare("DELETE FROM story_drafts WHERE conversation_id = ?").run(conversationId);
+        db.prepare("DELETE FROM prompts WHERE conversation_id = ?").run(conversationId);
+        db.prepare("DELETE FROM conversation WHERE conversation_id = ?").run(conversationId);
+        db.exec("COMMIT");
+    } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+    }
+
+    // After the commit, so a failed delete never leaves a record without its
+    // transcript. A file that can't be removed is logged, not reported: the
+    // interview itself is already gone.
+    try {
+        removeConversationFiles(conversationId);
+    } catch (err) {
+        console.error(`Couldn't remove the files for conversation ${conversationId}:`, err);
+    }
+    res.json({ ok: true });
 });
 
 router.get("/conversations/:id/prompts", requireAuth, (req, res) => {
