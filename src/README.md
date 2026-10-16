@@ -310,8 +310,7 @@ the other side agrees. Declining deletes the row, so the pair can try again.
   + fetch wrapper); `login.html`/`index.html`'s scripts all go through it
 - `public/login.html` + `loginScript.js` -- login/signup form
 - `public/index.html` + `profile.js` -- the session gate for the page, and the
-  profile tab: photo, personal details (Save/Cancel) and visibility settings
-  (which save as soon as they change)
+  profile tab: photo and personal details (Save/Cancel)
 - `public/family.js` -- the Family tab: the tree (one band per generation,
   with + Member / − Member / + Layer / × Layer beside it), the panel for the
   selected person (invite by email or link), Add member (a friend already on

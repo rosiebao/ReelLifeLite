@@ -1,5 +1,5 @@
-// The profile page (#selfSection): who you are, the details you can edit, and
-// who else gets to see them. Also the session gate for index.html -- nothing
+// The profile page (#selfSection): who you are and the details you can edit.
+// Also the session gate for index.html -- nothing
 // else on the page is shown until whoami() confirms the login.
 //
 // Values typed by the user only ever go in through .value/.textContent.
@@ -29,10 +29,6 @@ const profileEls = {
     saved: document.querySelector("#profileSaved"),
     saveBtn: document.querySelector("#profileSaveBtn"),
     cancelBtn: document.querySelector("#profileCancelBtn"),
-    visibilityRadios: document.querySelectorAll('input[name="profileVisibility"]'),
-    showLocation: document.querySelector("#profileShowLocation"),
-    showEmail: document.querySelector("#profileShowEmail"),
-    visibilityError: document.querySelector("#visibilityError"),
 };
 
 const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -100,20 +96,10 @@ function fillProfileForm(profile) {
     profileEls.bio.value = profile.bio;
 }
 
-function fillVisibility(profile) {
-    for (const radio of profileEls.visibilityRadios) {
-        radio.checked = radio.value === profile.profile_visibility;
-        radio.closest(".visibilityOption").classList.toggle("selected", radio.checked);
-    }
-    profileEls.showLocation.checked = profile.show_location;
-    profileEls.showEmail.checked = profile.show_email;
-}
-
 function applyProfile(profile) {
     profileState.saved = profile;
     renderProfileIdentity(profile);
     fillProfileForm(profile);
-    fillVisibility(profile);
 }
 
 // ---- Personal details ----
@@ -196,36 +182,6 @@ profileEls.photoInput.addEventListener("change", async () => {
     }
 });
 
-// ---- Visibility ----
-// These save as soon as they change; on failure they flip back.
-
-async function saveVisibility(changes) {
-    setProfileError(profileEls.visibilityError, "");
-    try {
-        const profile = await storageApi.updateProfile(changes);
-        profileState.saved = { ...profileState.saved, ...pickVisibility(profile) };
-    } catch (err) {
-        setProfileError(profileEls.visibilityError, profileErrorText(err));
-    }
-    if (profileState.saved) fillVisibility(profileState.saved);
-}
-
-function pickVisibility(profile) {
-    return {
-        profile_visibility: profile.profile_visibility,
-        show_location: profile.show_location,
-        show_email: profile.show_email,
-    };
-}
-
-for (const radio of profileEls.visibilityRadios) {
-    radio.addEventListener("change", () => {
-        if (radio.checked) saveVisibility({ profile_visibility: radio.value });
-    });
-}
-profileEls.showLocation.addEventListener("change", () => saveVisibility({ show_location: profileEls.showLocation.checked }));
-profileEls.showEmail.addEventListener("change", () => saveVisibility({ show_email: profileEls.showEmail.checked }));
-
 // ---- Loading ----
 
 (async function loadProfile() {
@@ -258,9 +214,6 @@ profileEls.showEmail.addEventListener("change", () => saveVisibility({ show_emai
             location: "",
             bio: "",
             photo_url: null,
-            profile_visibility: "friends",
-            show_location: false,
-            show_email: false,
             created_at: null,
         });
     }
