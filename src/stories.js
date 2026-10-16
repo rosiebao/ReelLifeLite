@@ -15,6 +15,7 @@ const { ApiError } = require("./errors");
 const { requireAuth } = require("./auth");
 const { friendIdsOf, areFriends } = require("./friends");
 const { familyIdsOf } = require("./family");
+const storyPhotos = require("./storyPhotos");
 
 const router = express.Router();
 
@@ -117,7 +118,10 @@ function contentFromConversation(conversationId) {
 
 // `includeContent` is off for the feeds: a card only shows title/summary/tags,
 // and shipping every full story to build a grid of them adds up fast.
-function storyJson(row, { includeContent = false } = {}) {
+// `photos` is the story's pictures in order (storyPhotos.js), the first being
+// the cover; looked up here unless the caller already has them for a feed.
+function storyJson(row, { includeContent = false, photos } = {}) {
+    const pictures = photos ?? storyPhotos.photosByStory([row.story_id]).get(row.story_id);
     const story = {
         story_id: row.story_id,
         user_id: row.user_id,
@@ -128,7 +132,10 @@ function storyJson(row, { includeContent = false } = {}) {
         tags: row.tags ? row.tags.split(",") : [],
         place: row.place,
         time_period: row.time_period,
-        photo: row.photo,
+        // The cover: the first photo published with it, or the old free-text
+        // picture field (the default avatar unless an API client set one).
+        photo: pictures.length ? pictures[0].url : row.photo,
+        photos: pictures,
         visibility: row.visibility,
         audiences: audiencesOf(row.visibility),
         created_at: row.created_at,
@@ -136,6 +143,12 @@ function storyJson(row, { includeContent = false } = {}) {
     };
     if (includeContent) story.content = row.content;
     return story;
+}
+
+// A feed's rows as JSON, with every story's photos fetched in one go.
+function feedJson(rows) {
+    const photos = storyPhotos.photosByStory(rows.map((row) => row.story_id));
+    return rows.map((row) => storyJson(row, { photos: photos.get(row.story_id) }));
 }
 
 const SELECT_STORY = `
@@ -238,49 +251,66 @@ router.post("/stories", requireAuth, (req, res) => {
         conversationId === null
             ? null
             : db.prepare("SELECT story_id FROM stories WHERE conversation_id = ?").get(conversationId);
+    // Checked before anything is written, so a bad list leaves the story as it
+    // was. Left out entirely, an existing story keeps its photos.
+    const photoIds = storyPhotos.parsePhotoIds(req.body?.photo_ids, {
+        userId: req.user.id,
+        storyId: existing?.story_id ?? null,
+    });
 
-    if (existing) {
-        db.prepare(
-            `UPDATE stories SET title = ?, summary = ?, content = ?, tags = ?, place = ?,
-             time_period = ?, photo = ?, visibility = ?, updated_at = ? WHERE story_id = ?`
-        ).run(
-            story.title,
-            story.summary,
-            story.content,
-            story.tags,
-            story.place,
-            story.time_period,
-            story.photo,
-            story.visibility,
-            now,
-            existing.story_id
-        );
-        res.status(200).json(storyJson(ownedStory(existing.story_id, req.user.id), { includeContent: true }));
-        return;
+    let storyId;
+    let droppedFiles = [];
+    db.exec("BEGIN");
+    try {
+        if (existing) {
+            storyId = existing.story_id;
+            db.prepare(
+                `UPDATE stories SET title = ?, summary = ?, content = ?, tags = ?, place = ?,
+                 time_period = ?, photo = ?, visibility = ?, updated_at = ? WHERE story_id = ?`
+            ).run(
+                story.title,
+                story.summary,
+                story.content,
+                story.tags,
+                story.place,
+                story.time_period,
+                story.photo,
+                story.visibility,
+                now,
+                storyId
+            );
+        } else {
+            const info = db
+                .prepare(
+                    `INSERT INTO stories (user_id, conversation_id, title, summary, content, tags, place,
+                     time_period, photo, visibility, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                )
+                .run(
+                    req.user.id,
+                    conversationId,
+                    story.title,
+                    story.summary,
+                    story.content,
+                    story.tags,
+                    story.place,
+                    story.time_period,
+                    story.photo,
+                    story.visibility,
+                    now,
+                    now
+                );
+            storyId = Number(info.lastInsertRowid);
+        }
+        if (photoIds !== undefined) droppedFiles = storyPhotos.setStoryPhotos(storyId, photoIds);
+        db.exec("COMMIT");
+    } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
     }
+    storyPhotos.removeFiles(droppedFiles);
 
-    const info = db
-        .prepare(
-            `INSERT INTO stories (user_id, conversation_id, title, summary, content, tags, place,
-             time_period, photo, visibility, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-            req.user.id,
-            conversationId,
-            story.title,
-            story.summary,
-            story.content,
-            story.tags,
-            story.place,
-            story.time_period,
-            story.photo,
-            story.visibility,
-            now,
-            now
-        );
-
-    res.status(201).json(storyJson(ownedStory(Number(info.lastInsertRowid), req.user.id), { includeContent: true }));
+    res.status(existing ? 200 : 201).json(storyJson(ownedStory(storyId, req.user.id), { includeContent: true }));
 });
 
 // ---- Feeds ----
@@ -291,7 +321,7 @@ router.get("/stories/mine", requireAuth, (req, res) => {
     const rows = db
         .prepare(`${SELECT_STORY} WHERE s.user_id = ? ORDER BY s.created_at DESC`)
         .all(req.user.id);
-    res.json(rows.map((row) => storyJson(row)));
+    res.json(feedJson(rows));
 });
 
 // The stories friends and family have shared with the caller -- not the
@@ -314,7 +344,7 @@ router.get("/stories/friends", requireAuth, (req, res) => {
              ORDER BY s.created_at DESC`
         )
         .all(req.user.id);
-    res.json(rows.map((row) => storyJson(row)));
+    res.json(feedJson(rows));
 });
 
 // Everything public, the caller's own included -- the Community tab is the
@@ -323,7 +353,7 @@ router.get("/stories/community", requireAuth, (req, res) => {
     const rows = db
         .prepare(`${SELECT_STORY} WHERE s.visibility = 'public' ORDER BY s.created_at DESC`)
         .all();
-    res.json(rows.map((row) => storyJson(row)));
+    res.json(feedJson(rows));
 });
 
 // The story a given conversation was published as, so the Story tab can show
@@ -367,35 +397,49 @@ router.patch("/stories/:id", requireAuth, (req, res) => {
         ? parseText(body.content, { field: "Story content", max: MAX_CONTENT_LENGTH })
         : current.content;
     if (!content) throw new ApiError(400, "Story content cannot be empty");
+    const photoIds = storyPhotos.parsePhotoIds(body.photo_ids, { userId: req.user.id, storyId: current.story_id });
 
-    db.prepare(
-        `UPDATE stories SET title = ?, summary = ?, content = ?, tags = ?, place = ?,
-         time_period = ?, photo = ?, visibility = ?, updated_at = ? WHERE story_id = ?`
-    ).run(
-        title,
-        has("summary") ? parseText(body.summary, { field: "Summary", max: MAX_SUMMARY_LENGTH }) : current.summary,
-        content,
-        has("tags") ? parseTags(body.tags).join(",") : current.tags,
-        has("place") ? parseText(body.place, { field: "Place", max: MAX_PLACE_LENGTH }) : current.place,
-        has("time_period")
-            ? parseText(body.time_period, { field: "Time period", max: MAX_TIME_PERIOD_LENGTH })
-            : current.time_period,
-        has("photo")
-            ? parseText(body.photo, { field: "Photo", max: MAX_PHOTO_LENGTH, fallback: DEFAULT_PHOTO })
-            : current.photo,
-        has("visibility") ? parseVisibility(body.visibility, current.visibility) : current.visibility,
-        new Date().toISOString(),
-        current.story_id
-    );
+    let droppedFiles = [];
+    db.exec("BEGIN");
+    try {
+        db.prepare(
+            `UPDATE stories SET title = ?, summary = ?, content = ?, tags = ?, place = ?,
+             time_period = ?, photo = ?, visibility = ?, updated_at = ? WHERE story_id = ?`
+        ).run(
+            title,
+            has("summary") ? parseText(body.summary, { field: "Summary", max: MAX_SUMMARY_LENGTH }) : current.summary,
+            content,
+            has("tags") ? parseTags(body.tags).join(",") : current.tags,
+            has("place") ? parseText(body.place, { field: "Place", max: MAX_PLACE_LENGTH }) : current.place,
+            has("time_period")
+                ? parseText(body.time_period, { field: "Time period", max: MAX_TIME_PERIOD_LENGTH })
+                : current.time_period,
+            has("photo")
+                ? parseText(body.photo, { field: "Photo", max: MAX_PHOTO_LENGTH, fallback: DEFAULT_PHOTO })
+                : current.photo,
+            has("visibility") ? parseVisibility(body.visibility, current.visibility) : current.visibility,
+            new Date().toISOString(),
+            current.story_id
+        );
+        if (photoIds !== undefined) droppedFiles = storyPhotos.setStoryPhotos(current.story_id, photoIds);
+        db.exec("COMMIT");
+    } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+    }
+    storyPhotos.removeFiles(droppedFiles);
 
     res.json(storyJson(ownedStory(current.story_id, req.user.id), { includeContent: true }));
 });
 
-// Unpublishing for good. The conversation it came from is untouched, so the
-// author can publish it again later.
+// Unpublishing for good, photos and all. The conversation it came from is
+// untouched, so the author can publish it again later.
 router.delete("/stories/:id", requireAuth, (req, res) => {
     const story = ownedStory(Number(req.params.id), req.user.id);
+    const files = storyPhotos.storyPhotoFiles(story.story_id);
+    // Its story_photos rows go with it (ON DELETE CASCADE).
     db.prepare("DELETE FROM stories WHERE story_id = ?").run(story.story_id);
+    storyPhotos.removeFiles(files);
     res.json({ ok: true });
 });
 

@@ -40,12 +40,14 @@ friends.js        /friends, /users/search -- the friend graph
 family.js         /family -- the Family tab's tree, and family invitations
 profile.js        /profile, /profile/photo, /users/{id}/profile -- the profile page
 stories.js        /stories -- publishing a conversation for others to read
+storyPhotos.js    /stories/photos, /story-photos/{name} -- pictures published
+                   with a story
 db.js             node:sqlite connection + schema (CREATE TABLE IF NOT EXISTS)
 security.js       password hashing + session token helpers
 storage.js        transcript/media file helpers
 errors.js         ApiError(status, message)
 test/             node --test suite (auth, conversations, drafts, family,
-                   friends, interview, stories)
+                   friends, interview, stories, story photos)
 public/           static frontend (see below)
 ```
 
@@ -224,7 +226,7 @@ as a list (`[]` for `private`). `public` already includes friends and family,
 so it's stored alone; `private` can't be combined with anything.
 
 - `POST /stories` -- `{"conversation_id", "title", "summary"?, "content"?,
-  "tags"?, "place"?, "time_period"?, "photo"?, "visibility"?}` ->
+  "tags"?, "place"?, "time_period"?, "photo"?, "visibility"?, "photo_ids"?}` ->
   `201` with the story. `content` defaults to the author's own messages in
   that conversation (the assistant's replies are interview prompts, not the
   story). Publishing the same conversation again edits its story and returns
@@ -247,6 +249,29 @@ so it's stored alone; `private` can't be combined with anything.
 
 Feed endpoints leave `content` out -- cards only need the title and summary,
 so the full text is fetched per story.
+
+#### Story photos
+
+Pictures published together with a story. Each one is uploaded on its own
+first, then listed (in order) in the story's `photo_ids` when it's published
+or edited (`POST /stories`, `PATCH /stories/{id}`). Every story comes back
+with `photos` (`[{"photo_id", "url"}]`, in order; `[]` for none) and `photo`,
+the cover: the first photo's URL, or the old free-text field when there are
+none.
+
+- `POST /stories/photos` -- `{"filename", "data_base64"}`, JPG or PNG (checked
+  by the file's bytes), up to 5 MB (`413` beyond) -> `201 {"photo_id", "url"}`.
+  Not published until a story lists it; ones never listed are removed after a
+  day. At most 30 can be waiting at once (`429`).
+- `photo_ids` on a story -- up to 10, each your own upload that isn't on
+  another story (`400` otherwise, and nothing is saved). The list replaces the
+  story's photos: any left out are deleted, files and all. Leaving
+  `photo_ids` out keeps the photos as they are; `[]` removes them all.
+  Deleting a story deletes its photos.
+- `GET /story-photos/{name}` -- the image itself. No login (`<img>` can't send
+  the token), like profile photos: the URL is only handed out with a story
+  you can read, and the random name keeps it from being guessed. Stored under
+  `MEDIA_ROOT/story_photos/`.
 
 ### Profile
 
@@ -333,7 +358,10 @@ the other side agrees. Declining deletes the row, so the pair can try again.
   An interview is deleted with the trash button beside End, or on its row
   under "Your Interviews". A published story is deleted (`DELETE
   /stories/{id}`, `stories.js`) the same way: the trash button beside "Edit
-  story" in the reader, or on its row under "Your Stories"
+  story" in the reader, or on its row under "Your Stories". The publish
+  dialog's "Photos" adds pictures to a story (each uploaded as it's picked),
+  reorders or removes them; the first is the cover on the Friends and
+  Community cards, and both story readers show them all above the text
 - `public/voiceInput.js` -- answering out loud with the browser's speech
   recognition (Chrome, Edge, Safari); dictates into the answer box with a live
   caption, and the mic button hides where it isn't supported. Restarts itself

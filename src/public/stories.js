@@ -49,6 +49,9 @@ const storyState = {
     myStories: [],
     // The story open in the Story tab's reader (#storyReader).
     tabReaderStory: null,
+    // The publish dialog's photos, in order: { photo_id, url } once uploaded,
+    // or { pending: true, previewUrl } while the upload is under way.
+    publishingPhotos: [],
 };
 
 const publishModal = document.querySelector("#publishModal");
@@ -61,6 +64,10 @@ const publishTimePeriodInput = document.querySelector("#publishTimePeriod");
 const publishTagsInput = document.querySelector("#publishTags");
 const publishAudienceBoxes = document.querySelectorAll('input[name="publishAudience"]');
 const publishAudienceHint = document.querySelector("#publishAudienceHint");
+const publishPhotoList = document.querySelector("#publishPhotoList");
+const publishPhotoAdd = document.querySelector("#publishPhotoAdd");
+const publishPhotoInput = document.querySelector("#publishPhotoInput");
+const publishPhotoError = document.querySelector("#publishPhotoError");
 const publishContentInput = document.querySelector("#publishContent");
 const publishError = document.querySelector("#publishError");
 const publishNotice = document.querySelector("#publishNotice");
@@ -72,6 +79,7 @@ const storyModalTitle = document.querySelector("#storyModalTitle");
 const storyModalByline = document.querySelector("#storyModalByline");
 const storyModalSetting = document.querySelector("#storyModalSetting");
 const storyModalTags = document.querySelector("#storyModalTags");
+const storyModalPhotos = document.querySelector("#storyModalPhotos");
 const storyModalContent = document.querySelector("#storyModalContent");
 const storyModalCloseBtn = document.querySelector("#storyModalCloseBtn");
 const storyAddFriendBtn = document.querySelector("#storyAddFriendBtn");
@@ -176,6 +184,7 @@ const storyReaderTopic = document.querySelector("#storyReaderTopic");
 const storyReaderTitle = document.querySelector("#storyReaderTitle");
 const storyReaderMeta = document.querySelector("#storyReaderMeta");
 const storyReaderContent = document.querySelector("#storyReaderContent");
+const storyReaderPhotos = document.querySelector("#storyReaderPhotos");
 const storyReaderEditBtn = document.querySelector("#storyReaderEditBtn");
 const storyReaderDeleteBtn = document.querySelector("#storyReaderDeleteBtn");
 
@@ -233,6 +242,31 @@ function renderParagraphs(container, text) {
     }
 }
 
+// The pictures published with a story, above its text, in the order the
+// author put them. Each opens full size in a new tab. Hidden when there are
+// none. The URLs come from the server (/story-photos/<random name>), set
+// through .src, never through innerHTML.
+function renderStoryPhotos(container, story) {
+    container.innerHTML = "";
+    const photos = Array.isArray(story.photos) ? story.photos : [];
+    container.classList.toggle("single", photos.length === 1);
+    photos.forEach((photo, index) => {
+        const link = document.createElement("a");
+        link.className = "storyPhoto";
+        link.href = photo.url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.title = "Open full size";
+        const image = document.createElement("img");
+        image.src = photo.url;
+        image.alt = `Photo ${index + 1} of ${photos.length} from "${story.title}"`;
+        image.loading = "lazy";
+        link.appendChild(image);
+        container.appendChild(link);
+    });
+    show(container, photos.length > 0);
+}
+
 // Opens one of your stories in the Story tab, in place of the interview.
 async function openTabStoryReader(storyId) {
     let story;
@@ -255,6 +289,7 @@ async function openTabStoryReader(storyId) {
     show(storyReaderTopic, Boolean(topic));
     storyReaderTitle.textContent = story.title;
     storyReaderMeta.textContent = `${longDate(story.created_at)} • ${readingMinutes(story.content)} min read`;
+    renderStoryPhotos(storyReaderPhotos, story);
     renderParagraphs(storyReaderContent, story.content);
     // Editing goes through the publish dialog, which needs the interview.
     show(storyReaderEditBtn, story.conversation_id !== null);
@@ -680,6 +715,7 @@ async function openStoryReader(storyId) {
     storyModalTags.innerHTML = "";
     storyModalTags.append(...tagElements(story.tags));
     show(storyModalTags, story.tags.length > 0);
+    renderStoryPhotos(storyModalPhotos, story);
 
     // One <p> per paragraph rather than one block of text, so a story told
     // over several messages still reads as several paragraphs.
@@ -748,6 +784,10 @@ async function openPublishModal(conversationId, { draft, details, notice = "" } 
     // Blank means "use what's in the conversation" -- the server rebuilds the
     // text from the author's messages (see ../stories.js).
     publishContentInput.value = draft || story?.content || (await conversationText(conversationId));
+    // A published story's photos, ready to add to, reorder or remove.
+    storyState.publishingPhotos = (story?.photos || []).map((photo) => ({ ...photo }));
+    show(publishPhotoError, false);
+    renderPublishPhotos();
 
     storyState.publishingSnapshot = publishFormValues();
     storyState.publishingDraft = Boolean(draft);
@@ -767,8 +807,159 @@ function publishFormValues() {
         ]
             .map((input) => input.value)
             .concat(selectedAudiences().join(","))
+            .concat(storyState.publishingPhotos.map((photo) => photo.photo_id ?? "pending").join(","))
     );
 }
+
+// ---- Photos ----
+// Picked photos are uploaded straight away (storageApi.uploadStoryPhoto), so
+// by the time "Publish" is pressed only their ids need sending. A preview of
+// each shows while it uploads. The order of the list is the order readers see,
+// and the first one is the cover on the Friends and Community cards.
+
+const MAX_STORY_PHOTOS = 10;
+const MAX_STORY_PHOTO_BYTES = 5 * 1024 * 1024;
+
+function publishPhotosUploading() {
+    return storyState.publishingPhotos.some((photo) => photo.pending);
+}
+
+function photoButton(icon, label, onClick, { disabled = false } = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "publishPhotoAction";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.disabled = disabled;
+    const image = document.createElement("ion-icon");
+    image.setAttribute("name", icon);
+    image.setAttribute("aria-hidden", "true");
+    button.appendChild(image);
+    button.addEventListener("click", onClick);
+    return button;
+}
+
+function movePublishPhoto(from, to) {
+    const photos = storyState.publishingPhotos;
+    if (to < 0 || to >= photos.length) return;
+    const [photo] = photos.splice(from, 1);
+    photos.splice(to, 0, photo);
+    renderPublishPhotos();
+}
+
+function renderPublishPhotos() {
+    const photos = storyState.publishingPhotos;
+    publishPhotoList.innerHTML = "";
+    photos.forEach((photo, index) => {
+        const tile = document.createElement("div");
+        tile.className = "publishPhoto";
+        tile.classList.toggle("pending", Boolean(photo.pending));
+
+        const image = document.createElement("img");
+        image.src = photo.pending ? photo.previewUrl : photo.url;
+        image.alt = `Photo ${index + 1}`;
+        tile.appendChild(image);
+
+        if (index === 0) {
+            const badge = document.createElement("span");
+            badge.className = "publishPhotoCover";
+            badge.textContent = "Cover";
+            tile.appendChild(badge);
+        }
+        if (photo.pending) {
+            const status = document.createElement("span");
+            status.className = "publishPhotoStatus";
+            status.textContent = "Uploading…";
+            tile.appendChild(status);
+        } else {
+            const actions = document.createElement("div");
+            actions.className = "publishPhotoActions";
+            actions.append(
+                photoButton("chevron-back-outline", "Move earlier", () => movePublishPhoto(index, index - 1), {
+                    disabled: index === 0,
+                }),
+                photoButton("chevron-forward-outline", "Move later", () => movePublishPhoto(index, index + 1), {
+                    disabled: index === photos.length - 1,
+                }),
+                photoButton("close-outline", "Remove photo", () => {
+                    storyState.publishingPhotos.splice(index, 1);
+                    renderPublishPhotos();
+                })
+            );
+            tile.appendChild(actions);
+        }
+        publishPhotoList.appendChild(tile);
+    });
+    show(publishPhotoList, photos.length > 0);
+    // At the limit the add button goes, rather than refusing the next pick.
+    show(publishPhotoAdd, photos.length < MAX_STORY_PHOTOS);
+    publishSubmitBtn.disabled = publishPhotosUploading();
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+}
+
+async function addPublishPhoto(file) {
+    const entry = { pending: true, previewUrl: URL.createObjectURL(file) };
+    storyState.publishingPhotos.push(entry);
+    renderPublishPhotos();
+    try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const uploaded = await storageApi.uploadStoryPhoto({
+            filename: file.name,
+            dataBase64: String(dataUrl).split(",")[1],
+        });
+        Object.assign(entry, uploaded, { pending: false });
+    } catch (err) {
+        // The dialog may have been closed (or reopened) meanwhile; only drop
+        // the tile if it's still in this dialog's list.
+        const index = storyState.publishingPhotos.indexOf(entry);
+        if (index !== -1) storyState.publishingPhotos.splice(index, 1);
+        // Added to whatever else this pick turned up, rather than replacing it.
+        const message = `Couldn't add ${file.name}: ${errorMessage(err)}`;
+        const shown = publishPhotoError.classList.contains("hidden") ? "" : publishPhotoError.textContent;
+        publishPhotoError.textContent = shown ? `${shown} ${message}` : message;
+        show(publishPhotoError, true);
+    } finally {
+        URL.revokeObjectURL(entry.previewUrl);
+        delete entry.previewUrl;
+    }
+    renderPublishPhotos();
+}
+
+publishPhotoInput.addEventListener("change", () => {
+    const files = [...publishPhotoInput.files];
+    // Cleared so picking the same file again still fires "change".
+    publishPhotoInput.value = "";
+    show(publishPhotoError, false);
+
+    const problems = [];
+    const room = MAX_STORY_PHOTOS - storyState.publishingPhotos.length;
+    const accepted = [];
+    files.forEach((file, index) => {
+        if (index >= room) {
+            if (index === room) problems.push(`A story can have up to ${MAX_STORY_PHOTOS} photos.`);
+        } else if (!["image/jpeg", "image/png"].includes(file.type)) {
+            problems.push(`${file.name} isn't a JPG or PNG.`);
+        } else if (file.size > MAX_STORY_PHOTO_BYTES) {
+            problems.push(`${file.name} is over 5 MB.`);
+        } else {
+            accepted.push(file);
+        }
+    });
+    // Shown before the uploads start, so an upload that fails adds to it.
+    if (problems.length) {
+        publishPhotoError.textContent = problems.join(" ");
+        show(publishPhotoError, true);
+    }
+    accepted.forEach(addPublishPhoto);
+});
 
 // ---- Who can read it ----
 // Friends and Family can be ticked together. Everyone already includes them
@@ -863,6 +1054,8 @@ function closePublishModal() {
     storyState.publishingStory = null;
     storyState.publishingSnapshot = null;
     storyState.publishingDraft = false;
+    storyState.publishingPhotos = [];
+    publishPhotoList.innerHTML = "";
 }
 
 // Cancel, a click outside the dialog and Esc all come through here; publishing
@@ -893,6 +1086,11 @@ publishForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const conversationId = storyState.publishingConversationId;
     if (conversationId === null) return;
+    if (publishPhotosUploading()) {
+        publishError.textContent = "Wait for your photos to finish uploading.";
+        show(publishError, true);
+        return;
+    }
 
     publishSubmitBtn.disabled = true;
     try {
@@ -907,6 +1105,7 @@ publishForm.addEventListener("submit", async (event) => {
             place: publishPlaceInput.value,
             timePeriod: publishTimePeriodInput.value,
             visibility: selectedAudiences(),
+            photoIds: storyState.publishingPhotos.map((photo) => photo.photo_id),
         });
         closePublishModal();
         await refreshPublishStatus(conversationId);

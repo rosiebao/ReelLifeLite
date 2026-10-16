@@ -26,7 +26,7 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const PROFILE_VISIBILITIES = ["friends", "community"];
 
 // JPG and PNG only, told apart by their first bytes rather than whatever the
-// browser said the file was.
+// browser said the file was. Story photos (storyPhotos.js) use the same rules.
 const PHOTO_TYPES = [
     { extension: "jpg", magic: Buffer.from([0xff, 0xd8, 0xff]) },
     { extension: "png", magic: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
@@ -208,4 +208,4 @@ router.get("/users/:id/profile", requireAuth, (req, res) => {
     });
 });
 
-module.exports = { router, MAX_PHOTO_BYTES, photoUrl };
+module.exports = { router, MAX_PHOTO_BYTES, PHOTO_TYPES, photoUrl };

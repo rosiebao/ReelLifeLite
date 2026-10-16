@@ -224,7 +224,9 @@ const storageApi = {
 
   // `visibility`: "private", or the audiences to share with as a list --
   // ["friends"], ["friends", "family"], ["public"] (see ../stories.js).
-  publishStory({ conversationId, title, summary, content, tags, place, timePeriod, photo, visibility } = {}) {
+  // `photoIds`: the story's photos in order (from uploadStoryPhoto), the first
+  // being the cover; left out, a story already published keeps its photos.
+  publishStory({ conversationId, title, summary, content, tags, place, timePeriod, photo, visibility, photoIds } = {}) {
     return apiFetch("/stories", {
       method: "POST",
       body: {
@@ -237,8 +239,15 @@ const storageApi = {
         time_period: timePeriod ?? "",
         photo: photo ?? "",
         visibility: visibility ?? "private",
+        ...(photoIds ? { photo_ids: photoIds } : {}),
       },
     });
+  },
+
+  // One picture for a story, uploaded as soon as it's picked -> { photo_id,
+  // url }. It's only published once the story is saved with its photo_id.
+  uploadStoryPhoto({ filename, dataBase64 }) {
+    return apiFetch("/stories/photos", { method: "POST", body: { filename, data_base64: dataBase64 } });
   },
 
   // Feed cards carry no `content`; getStory() fetches the full text.

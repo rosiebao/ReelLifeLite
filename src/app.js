@@ -19,14 +19,17 @@ const { router: friendsRouter } = require('./friends');
 const { router: interviewRouter } = require('./interview');
 const { router: profileRouter } = require('./profile');
 const { router: storiesRouter } = require('./stories');
+const { router: storyPhotosRouter } = require('./storyPhotos');
 const { ApiError } = require('./errors');
 
 const app = express();
 const PORT = process.env.PORT || 6767;
 
-// A profile photo (up to 5 MB) arrives base64-encoded in JSON, which makes it
-// about a third bigger; everything else keeps express's 100 KB default.
+// A photo (up to 5 MB) arrives base64-encoded in JSON, which makes it about a
+// third bigger; everything else keeps express's 100 KB default. That's the
+// profile photo and the photos published with a story.
 app.use('/profile/photo', express.json({ limit: '8mb' }));
+app.use('/stories/photos', express.json({ limit: '8mb' }));
 app.use(express.json());
 app.use(authRouter);
 app.use(conversationsRouter);
@@ -35,6 +38,8 @@ app.use(familyRouter);
 app.use(friendsRouter);
 app.use(interviewRouter);
 app.use(profileRouter);
+// Before storiesRouter, whose /stories/:id would otherwise see "photos".
+app.use(storyPhotosRouter);
 app.use(storiesRouter);
 app.use(express.static(path.join(__dirname, 'public')));
 

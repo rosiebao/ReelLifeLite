@@ -259,6 +259,7 @@
                                     </div>
                                 </div>
                                 <p id="storyReaderMeta" class="storyReaderMeta"></p>
+                                <div id="storyReaderPhotos" class="storyPhotos hidden"></div>
                                 <div id="storyReaderContent" class="storyReaderContent"></div>
                             </article>
                             <div id="testConversationPanel" class="testConversationPanel hidden">
@@ -388,6 +389,19 @@
                     <label>Tags
                         <input id="publishTags" type="text" placeholder="Family, Culture/Faith" />
                     </label>
+                    <!-- Pictures published with the story (stories.js). Each one is
+                         uploaded when it's picked; the first is the cover. -->
+                    <fieldset class="publishPhotos">
+                        <legend>Photos</legend>
+                        <div id="publishPhotoList" class="publishPhotoList"></div>
+                        <label class="addPhotoButton" id="publishPhotoAdd">
+                            <ion-icon name="images-outline" aria-hidden="true"></ion-icon>
+                            <span>Add photos</span>
+                            <input type="file" id="publishPhotoInput" accept="image/jpeg,image/png" multiple />
+                        </label>
+                        <p class="publishPhotoHint">JPG or PNG · Up to 5 MB each · Up to 10. The first one is the cover.</p>
+                        <p id="publishPhotoError" class="publishError hidden" role="alert"></p>
+                    </fieldset>
                     <!-- Any mix of Friends and Family; Everyone covers both, and
                          none ticked is "Only me" (stories.js). -->
                     <fieldset id="publishAudience" class="publishAudience">
@@ -487,10 +501,8 @@
                 <p id="storyModalByline" class="byAuthor"></p>
                 <p id="storyModalSetting" class="setting"></p>
                 <p id="storyModalTags" class="tags"></p>
+                <div id="storyModalPhotos" class="storyPhotos hidden"></div>
                 <div id="storyModalContent" class="storyModalContent"></div>
-                <div class="imageUpload">
-                    <input type="file" id="storyImageUpload" accept="image/*">
-                </div>
                 <div class="modalActions">
                     <span class="modalSpacer"></span>
                     <button type="button" id="storyAddFriendBtn" class="hidden">Add friend</button>

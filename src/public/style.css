@@ -948,6 +948,169 @@ body.restoringPage main > section {
     color: #667085;
     font-size: 0.9em;
 }
+/* "Photos": thumbnails in the order readers see them, then "Add photos". */
+.publishPhotos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-size: 0.9em;
+}
+.publishPhotos legend {
+    margin-bottom: 5px;
+    padding: 0;
+}
+.publishPhotoList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+}
+/* The id rule's display: grid outranks .hidden. */
+.publishPhotoList.hidden {
+    display: none;
+}
+.publishPhoto {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border: 1px solid #e3ded6;
+    border-radius: 10px;
+    background-color: #f4f1ec;
+}
+.publishPhoto img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.publishPhoto.pending img {
+    opacity: 0.5;
+}
+.publishPhotoCover,
+.publishPhotoStatus {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background-color: #0a1936cc;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.publishPhotoStatus {
+    top: auto;
+    bottom: 6px;
+}
+.publishPhotoActions {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    left: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+.publishForm .publishPhotoAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: #ffffffee;
+    box-shadow: 0 1px 4px rgba(10, 25, 54, 0.2);
+    color: var(--navy);
+    font-size: 1rem;
+    cursor: pointer;
+}
+.publishForm .publishPhotoAction:hover:not(:disabled) {
+    background-color: #ffffff;
+}
+.publishForm .publishPhotoAction:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.publishForm .publishPhotoAction:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 1px;
+}
+.publishForm label.addPhotoButton {
+    flex-direction: row;
+    align-items: center;
+    align-self: flex-start;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1.5px dashed #b7b0a5;
+    border-radius: 10px;
+    background-color: #ffffff;
+    font-size: 1em;
+    font-weight: 700;
+    cursor: pointer;
+}
+.publishForm label.addPhotoButton:hover {
+    background-color: #f4f1ec;
+}
+.publishForm label.addPhotoButton:focus-within {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+.publishForm label.addPhotoButton.hidden {
+    display: none;
+}
+/* Hidden but still reachable: the label is the visible button. */
+.publishForm .addPhotoButton input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+}
+.publishPhotoHint {
+    color: #667085;
+    font-size: 0.9em;
+}
+/* The photos in both story readers: a strip that scrolls sideways, or one
+   picture at full width. */
+.storyPhotos {
+    display: flex;
+    gap: 10px;
+    margin: 12px 0 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+}
+.storyPhotos.hidden {
+    display: none;
+}
+.storyPhoto {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+}
+.storyPhoto img {
+    display: block;
+    height: 220px;
+    max-width: 80vw;
+    border-radius: 10px;
+    object-fit: cover;
+}
+.storyPhotos.single .storyPhoto {
+    flex: 1;
+}
+.storyPhotos.single .storyPhoto img {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: 360px;
+}
+.storyPhoto:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+    border-radius: 10px;
+}
 .publishRow {
     display: flex;
     gap: 1vw;
@@ -1013,10 +1176,6 @@ body.restoringPage main > section {
     background-color: #ffffff88;
     color: #444444;
     font-size: 0.85em;
-}
-#storyImageUpload {
-    display: block;
-    margin: 1vh auto 0;
 }
 /* ---- Family tab ----
    A header card (title, Add member / Invite family, the Members drop-down)

@@ -229,6 +229,24 @@ db.exec(`
 // The feed queries filter by visibility and then by author, so lead with it.
 db.exec("CREATE INDEX IF NOT EXISTS stories_visibility ON stories (visibility, user_id)");
 
+// Photos published with a story (storyPhotos.js). One is uploaded before the
+// story it goes with may even exist, so it starts out with no story_id and is
+// attached -- in order, `position` 0 being the cover -- when the story is
+// published or saved. `file_name` is a random name under
+// MEDIA_ROOT/story_photos, never a path.
+db.exec(`
+    CREATE TABLE IF NOT EXISTS story_photos (
+        photo_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        story_id INTEGER REFERENCES stories(story_id) ON DELETE CASCADE,
+        file_name TEXT NOT NULL UNIQUE,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+    )
+`);
+db.exec("CREATE INDEX IF NOT EXISTS story_photos_story ON story_photos (story_id, position)");
+db.exec("CREATE INDEX IF NOT EXISTS story_photos_user ON story_photos (user_id, story_id)");
+
 // Every story written when an interview ends ("End"), kept so one can be brought
 // back after the publish dialog that showed it was closed. A draft is
 // never edited: editing happens in the publish dialog, and publishing copies

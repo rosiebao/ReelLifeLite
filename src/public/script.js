@@ -22,8 +22,6 @@ const PAGE_SECTIONS = {
     community: "#communitySection",
 };
 
-$("#storyImageUpload").css("height", $("#storyImageUpload").width + "px");
-
 // ---- Cookie helpers ----
 
 function readCookie(name) {
