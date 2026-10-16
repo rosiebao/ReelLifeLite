@@ -6,11 +6,29 @@
 // a template string. These feeds show text written by *other* accounts, so a
 // story titled `<img onerror=...>` would otherwise run in a reader's session.
 
-const VISIBILITY_LABELS = {
-    private: "Only me",
+// The audiences a story can be shared with, in the order the server stores
+// them (../stories.js). None at all is "private": only the author.
+const AUDIENCE_LABELS = {
     friends: "Friends",
+    family: "Family",
     public: "Everyone",
 };
+
+// A story's audiences as a list (["friends", "family"]); [] for "Only me".
+// Older responses without `audiences` fall back to splitting `visibility`.
+function storyAudiences(story) {
+    if (Array.isArray(story?.audiences)) return story.audiences;
+    return String(story?.visibility || "private")
+        .split(",")
+        .filter((audience) => AUDIENCE_LABELS[audience]);
+}
+
+// As a short label: "Only me", "Friends", "Friends + Family", "Everyone".
+function visibilityLabel(story) {
+    const audiences = storyAudiences(story);
+    if (!audiences.length) return "Only me";
+    return audiences.map((audience) => AUDIENCE_LABELS[audience]).join(" + ");
+}
 
 const storyState = {
     // The conversation the publish dialog is currently open for, and the story
@@ -41,13 +59,13 @@ const publishSummaryInput = document.querySelector("#publishSummary");
 const publishPlaceInput = document.querySelector("#publishPlace");
 const publishTimePeriodInput = document.querySelector("#publishTimePeriod");
 const publishTagsInput = document.querySelector("#publishTags");
-const publishVisibilitySelect = document.querySelector("#publishVisibility");
+const publishAudienceBoxes = document.querySelectorAll('input[name="publishAudience"]');
+const publishAudienceHint = document.querySelector("#publishAudienceHint");
 const publishContentInput = document.querySelector("#publishContent");
 const publishError = document.querySelector("#publishError");
 const publishNotice = document.querySelector("#publishNotice");
 const publishSubmitBtn = document.querySelector("#publishSubmitBtn");
 const publishCancelBtn = document.querySelector("#publishCancelBtn");
-const unpublishBtn = document.querySelector("#unpublishBtn");
 
 const storyModal = document.querySelector("#storyModal");
 const storyModalTitle = document.querySelector("#storyModalTitle");
@@ -111,7 +129,7 @@ function visibilityLine(story) {
     const line = document.createElement("p");
     const badge = document.createElement("span");
     badge.className = "visibilityBadge";
-    badge.textContent = VISIBILITY_LABELS[story.visibility] || story.visibility;
+    badge.textContent = visibilityLabel(story);
     line.appendChild(badge);
     return line;
 }
@@ -133,7 +151,7 @@ async function refreshMyStories() {
     for (const story of stories) myStoriesGrid.appendChild(friendStoryCard(story, { own: true }));
     show(myStoriesEmpty, stories.length === 0);
     // A story open in the Story tab's reader may have just been edited or
-    // unpublished: show the new version, or go back to the empty state.
+    // deleted: show the new version, or go back to the empty state.
     const reading = storyState.tabReaderStory;
     if (reading) {
         if (stories.some((story) => story.story_id === reading.story_id)) {
@@ -310,7 +328,7 @@ storyReaderDeleteBtn.addEventListener("click", () => deleteMyStory(storyState.ta
 const friendFeedState = { stories: [], filter: "all" };
 
 const FRIEND_FEED_EMPTY = {
-    all: "Nothing here yet. Add some friends, and their stories shared with friends will show up here.",
+    all: "Nothing here yet. Add some friends or family, and the stories they share with you will show up here.",
     saved: "No saved stories yet. Tap the bookmark on a story to keep it here.",
 };
 
@@ -718,7 +736,6 @@ async function openPublishModal(conversationId, { draft, details, notice = "" } 
 
     publishModalTitle.textContent = story ? "Edit your published story" : "Publish your story";
     publishSubmitBtn.textContent = story ? "Save changes" : "Publish";
-    show(unpublishBtn, Boolean(story));
 
     const drafted = details || {};
     publishTitleInput.value = story?.title || drafted.title || "";
@@ -726,7 +743,8 @@ async function openPublishModal(conversationId, { draft, details, notice = "" } 
     publishPlaceInput.value = story?.place || drafted.place || "";
     publishTimePeriodInput.value = story?.time_period || drafted.time_period || "";
     publishTagsInput.value = (story?.tags?.length ? story.tags : drafted.tags || []).join(", ");
-    publishVisibilitySelect.value = story?.visibility || "friends";
+    // A new story starts out shared with friends, as it always has.
+    setSelectedAudiences(story ? storyAudiences(story) : ["friends"]);
     // Blank means "use what's in the conversation" -- the server rebuilds the
     // text from the author's messages (see ../stories.js).
     publishContentInput.value = draft || story?.content || (await conversationText(conversationId));
@@ -745,10 +763,75 @@ function publishFormValues() {
             publishPlaceInput,
             publishTimePeriodInput,
             publishTagsInput,
-            publishVisibilitySelect,
             publishContentInput,
-        ].map((input) => input.value)
+        ]
+            .map((input) => input.value)
+            .concat(selectedAudiences().join(","))
     );
+}
+
+// ---- Who can read it ----
+// Friends and Family can be ticked together. Everyone already includes them
+// both, so ticking it ticks and locks them; unticking it hands them back as
+// they were. Nothing ticked is "Only me".
+
+const publicAudienceBox = [...publishAudienceBoxes].find((box) => box.value === "public");
+// What Friends/Family were before Everyone locked them, to put back.
+let audiencesBeforePublic = null;
+
+function selectedAudiences() {
+    if (publicAudienceBox.checked) return ["public"];
+    return [...publishAudienceBoxes].filter((box) => box.checked).map((box) => box.value);
+}
+
+function renderAudienceHint() {
+    const audiences = selectedAudiences();
+    let hint;
+    if (audiences.includes("public")) {
+        hint = "Everyone on ReelLife can read it in Community, friends and family included.";
+    } else if (!audiences.length) {
+        hint = "Only you can read it. Tick Friends or Family to share it.";
+    } else {
+        const who = audiences.length === 2 ? "your friends and family" : `your ${audiences[0]}`;
+        hint = `Only you and ${who} can read it.`;
+        if (audiences.includes("family")) hint += " Family means people linked to your family tree on ReelLife.";
+    }
+    publishAudienceHint.textContent = hint;
+}
+
+function lockToPublic(locked) {
+    for (const box of publishAudienceBoxes) {
+        if (box === publicAudienceBox) continue;
+        box.disabled = locked;
+        box.closest(".audienceOption").classList.toggle("locked", locked);
+    }
+}
+
+function setSelectedAudiences(audiences) {
+    const isPublic = audiences.includes("public");
+    for (const box of publishAudienceBoxes) box.checked = isPublic || audiences.includes(box.value);
+    // Unticking Everyone on a story that opened public narrows it to friends
+    // and family, rather than all the way down to "Only me".
+    audiencesBeforePublic = isPublic ? ["friends", "family"] : null;
+    lockToPublic(isPublic);
+    renderAudienceHint();
+}
+
+publicAudienceBox.addEventListener("change", () => {
+    const others = [...publishAudienceBoxes].filter((box) => box !== publicAudienceBox);
+    if (publicAudienceBox.checked) {
+        audiencesBeforePublic = others.filter((box) => box.checked).map((box) => box.value);
+        for (const box of others) box.checked = true;
+    } else {
+        const before = audiencesBeforePublic || [];
+        for (const box of others) box.checked = before.includes(box.value);
+        audiencesBeforePublic = null;
+    }
+    lockToPublic(publicAudienceBox.checked);
+    renderAudienceHint();
+});
+for (const box of publishAudienceBoxes) {
+    if (box !== publicAudienceBox) box.addEventListener("change", renderAudienceHint);
 }
 
 // Closing would lose something: edits typed since the dialog opened, or a
@@ -783,7 +866,7 @@ function closePublishModal() {
 }
 
 // Cancel, a click outside the dialog and Esc all come through here; publishing
-// and unpublishing close it directly, since there's nothing left to lose.
+// closes it directly, since there's nothing left to lose.
 function requestClosePublishModal() {
     if (publishFormDirty()) {
         const message = storyState.publishingDraft
@@ -823,7 +906,7 @@ publishForm.addEventListener("submit", async (event) => {
             tags: publishTagsInput.value.split(",").map((tag) => tag.trim()).filter(Boolean),
             place: publishPlaceInput.value,
             timePeriod: publishTimePeriodInput.value,
-            visibility: publishVisibilitySelect.value,
+            visibility: selectedAudiences(),
         });
         closePublishModal();
         await refreshPublishStatus(conversationId);
@@ -833,23 +916,6 @@ publishForm.addEventListener("submit", async (event) => {
         show(publishError, true);
     } finally {
         publishSubmitBtn.disabled = false;
-    }
-});
-
-unpublishBtn.addEventListener("click", async () => {
-    const story = storyState.publishingStory;
-    const conversationId = storyState.publishingConversationId;
-    if (!story) return;
-    if (!confirm(`Unpublish "${story.title}"? Your conversation stays, but nobody else will see the story.`)) return;
-
-    try {
-        await storageApi.deleteStory(story.story_id);
-        closePublishModal();
-        await refreshPublishStatus(conversationId);
-        refreshStoryFeeds();
-    } catch (err) {
-        publishError.textContent = errorMessage(err);
-        show(publishError, true);
     }
 });
 
@@ -872,7 +938,7 @@ async function refreshPublishStatus(conversationId) {
     }
 
     if (story) {
-        storyPublishStatus.textContent = `Published • ${VISIBILITY_LABELS[story.visibility]}`;
+        storyPublishStatus.textContent = `Published • ${visibilityLabel(story)}`;
         storyPublishStatus.classList.add("published");
     } else {
         storyPublishStatus.textContent = "Not published";

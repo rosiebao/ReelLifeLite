@@ -329,7 +329,7 @@
                         <!-- Right: their stories (stories.js). -->
                         <div class="friendFeed">
                             <div class="friendFeedHeader">
-                                <h2>Stories from your friends</h2>
+                                <h2>Stories from your friends &amp; family</h2>
                                 <p>Memories worth sharing.</p>
                             </div>
                             <div class="feedFilters" id="friendStoryFilters" role="group" aria-label="Show">
@@ -338,7 +338,7 @@
                             </div>
                             <div class="friendStoryGrid" id="friendStories"></div>
                             <p id="friendStoriesEmpty" class="feedEmpty">
-                                Nothing here yet. Add some friends, and their stories shared with friends will show up here.
+                                Nothing here yet. Add some friends or family, and the stories they share with you will show up here.
                             </p>
                         </div>
                     </div>
@@ -388,19 +388,29 @@
                     <label>Tags
                         <input id="publishTags" type="text" placeholder="Family, Culture/Faith" />
                     </label>
-                    <label>Who can read it
-                        <select id="publishVisibility">
-                            <option value="private">Only me</option>
-                            <option value="friends">My friends</option>
-                            <option value="public">Everyone (Community)</option>
-                        </select>
-                    </label>
+                    <!-- Any mix of Friends and Family; Everyone covers both, and
+                         none ticked is "Only me" (stories.js). -->
+                    <fieldset id="publishAudience" class="publishAudience">
+                        <legend>Who can read it</legend>
+                        <label class="audienceOption">
+                            <input type="checkbox" name="publishAudience" value="friends" />
+                            <span>My friends</span>
+                        </label>
+                        <label class="audienceOption">
+                            <input type="checkbox" name="publishAudience" value="family" />
+                            <span>My family</span>
+                        </label>
+                        <label class="audienceOption">
+                            <input type="checkbox" name="publishAudience" value="public" />
+                            <span>Everyone (Community)</span>
+                        </label>
+                        <p id="publishAudienceHint" class="publishAudienceHint" aria-live="polite"></p>
+                    </fieldset>
                     <label>Story text
                         <textarea id="publishContent" class="publishContent" rows="8"></textarea>
                     </label>
                     <p id="publishError" class="publishError hidden"></p>
                     <div class="modalActions">
-                        <button type="button" id="unpublishBtn" class="dangerButton hidden">Unpublish</button>
                         <span class="modalSpacer"></span>
                         <button type="button" id="publishCancelBtn">Cancel</button>
                         <button type="submit" id="publishSubmitBtn">Publish</button>

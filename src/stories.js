@@ -13,13 +13,19 @@ const express = require("express");
 const { db } = require("./db");
 const { ApiError } = require("./errors");
 const { requireAuth } = require("./auth");
-const { friendIdsOf, 
-        areFriends } = require("./friends");
+const { friendIdsOf, areFriends } = require("./friends");
+const { familyIdsOf } = require("./family");
 
 const router = express.Router();
 
-const VISIBILITIES = ["private", "friends", "public"];
-const DEFAULT_VISIBILITY = "private";
+// Who a story is shared with: any mix of the audiences below, stored in the
+// `visibility` column as a comma-separated list in this order ("friends",
+// "family", "friends,family"). With none it's "private" -- only the author.
+// "public" is everyone, so it's stored on its own: adding friends or family
+// to it wouldn't let anyone else in.
+const AUDIENCES = ["friends", "family", "public"];
+const PRIVATE = "private";
+const DEFAULT_VISIBILITY = PRIVATE;
 const DEFAULT_PHOTO = "profile.jpg";
 
 const MAX_TITLE_LENGTH = 120;
@@ -40,13 +46,36 @@ function parseText(value, { field, max, fallback = "" }) {
     return text;
 }
 
+// Takes one audience ("friends"), several as an array (["friends", "family"])
+// or as one comma-separated string ("friends,family"), and returns the stored
+// form. "private" (or an empty array) is only the author, and can't be mixed
+// with an audience.
 function parseVisibility(value, fallback = DEFAULT_VISIBILITY) {
     if (value === undefined || value === null || value === "") return fallback;
-    const visibility = String(value);
-    if (!VISIBILITIES.includes(visibility)) {
-        throw new ApiError(400, `Visibility must be one of: ${VISIBILITIES.join(", ")}`);
+    const raw = Array.isArray(value) ? value : String(value).split(",");
+    const picked = new Set();
+    for (const entry of raw) {
+        const audience = String(entry).trim();
+        if (!audience) continue;
+        if (audience !== PRIVATE && !AUDIENCES.includes(audience)) {
+            throw new ApiError(400, `Visibility must be "${PRIVATE}" or any of: ${AUDIENCES.join(", ")}`);
+        }
+        picked.add(audience);
     }
-    return visibility;
+    if (picked.has(PRIVATE)) {
+        if (picked.size > 1) throw new ApiError(400, `"${PRIVATE}" can't be combined with other audiences`);
+        return PRIVATE;
+    }
+    if (picked.has("public")) return "public";
+    const audiences = AUDIENCES.filter((audience) => picked.has(audience));
+    return audiences.length ? audiences.join(",") : PRIVATE;
+}
+
+// The stored visibility as a list of audiences; [] for "private".
+function audiencesOf(visibility) {
+    return String(visibility || PRIVATE)
+        .split(",")
+        .filter((audience) => AUDIENCES.includes(audience));
 }
 
 // Tags arrive either as an array (the publish form) or as one string someone
@@ -101,6 +130,7 @@ function storyJson(row, { includeContent = false } = {}) {
         time_period: row.time_period,
         photo: row.photo,
         visibility: row.visibility,
+        audiences: audiencesOf(row.visibility),
         created_at: row.created_at,
         updated_at: row.updated_at,
     };
@@ -115,22 +145,36 @@ const SELECT_STORY = `
 
 // ---- Visibility ----
 
+// Ids as a SQL list literal. They come from friendIdsOf()/familyIdsOf(),
+// which return integers straight out of SQLite, so there's no user-supplied
+// text here; inlined because the lists are variable-length.
+function idList(ids) {
+    const clean = ids.map(Number).filter(Number.isInteger);
+    return clean.length ? clean.join(",") : "NULL";
+}
+
+// True when the stored visibility (s.visibility) includes `audience`.
+function sharedWith(audience) {
+    return `(',' || s.visibility || ',') LIKE '%,${audience},%'`;
+}
+
+// Stories by someone else that userId may read: public ones, ones shared with
+// friends by a friend, and ones shared with family by family (see
+// family.js familyIdsOf). Shared by the single fetch and the Friends feed.
+function othersStoryFilter(userId) {
+    return `(
+        s.visibility = 'public'
+        OR (${sharedWith("friends")} AND s.user_id IN (${idList(friendIdsOf(userId))}))
+        OR (${sharedWith("family")} AND s.user_id IN (${idList(familyIdsOf(userId))}))
+    )`;
+}
+
 // The one definition of "userId is allowed to read this story": their own, or
-// public, or a friend's story shared with friends. Returns a SQL fragment and
-// its parameters so the feeds and the single fetch share the same rule.
-//
-// The friend ids are inlined as literals rather than bound parameters because
-// the list is variable-length; they come from friendIdsOf(), which returns
-// integers straight out of SQLite, so there's no user-supplied text here.
+// one shared with them. Returns a SQL fragment and its parameters so the
+// feeds and the single fetch share the same rule.
 function visibleStoryFilter(userId) {
-    const friendIds = friendIdsOf(userId).map(Number).filter(Number.isInteger);
-    const friendList = friendIds.length ? friendIds.join(",") : "NULL";
     return {
-        sql: `(
-            s.user_id = ?
-            OR s.visibility = 'public'
-            OR (s.visibility = 'friends' AND s.user_id IN (${friendList}))
-        )`,
+        sql: `(s.user_id = ? OR ${othersStoryFilter(userId)})`,
         params: [userId],
     };
 }
@@ -250,11 +294,13 @@ router.get("/stories/mine", requireAuth, (req, res) => {
     res.json(rows.map((row) => storyJson(row)));
 });
 
-// Friends' stories only -- the author's own published stories live on the
-// Story tab, and repeating them here would bury what friends have posted.
+// The stories friends and family have shared with the caller -- not the
+// caller's own, which live on the Story tab, and repeating them here would
+// bury what everyone else has posted. A public story shows up here from a
+// friend or family member; from anyone else it's on the Community tab.
 router.get("/stories/friends", requireAuth, (req, res) => {
-    const friendIds = friendIdsOf(req.user.id).map(Number).filter(Number.isInteger);
-    if (!friendIds.length) {
+    const people = [...new Set([...friendIdsOf(req.user.id), ...familyIdsOf(req.user.id)])];
+    if (!people.length) {
         res.json([]);
         return;
     }
@@ -262,11 +308,12 @@ router.get("/stories/friends", requireAuth, (req, res) => {
     const rows = db
         .prepare(
             `${SELECT_STORY}
-             WHERE s.user_id IN (${friendIds.join(",")})
-               AND s.visibility IN ('friends', 'public')
+             WHERE s.user_id IN (${idList(people)})
+               AND s.user_id <> ?
+               AND ${othersStoryFilter(req.user.id)}
              ORDER BY s.created_at DESC`
         )
-        .all();
+        .all(req.user.id);
     res.json(rows.map((row) => storyJson(row)));
 });
 

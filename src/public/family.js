@@ -750,8 +750,8 @@ function renderFamilyDetail() {
             el(
                 "p",
                 "familyDetailText",
-                `${member.name} is on ReelLife${username ? ` as @${username}` : ""}. You're friends, so the ` +
-                    "stories they share with friends show up on your Friends page."
+                `${member.name} is on ReelLife${username ? ` as @${username}` : ""}. You're friends and family, so ` +
+                    "the stories they share with friends or family show up on your Friends page."
             )
         );
     } else {

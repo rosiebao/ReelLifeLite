@@ -192,10 +192,15 @@ db.exec(`
 // conversation updates its story (see the unique index below) instead of
 // piling up duplicates in everyone's feed.
 //
-// visibility drives the Friends and Community tabs:
-//   'private'  -- only the author sees it
-//   'friends'  -- the author and their accepted friends (Friends tab)
-//   'public'   -- everyone (Friends tab for friends, Community tab for all)
+// visibility drives the Friends and Community tabs. It's 'private' (only the
+// author), 'public' (everyone: the Friends tab for friends and family, the
+// Community tab for all), or any mix of these audiences, comma-separated in
+// this order (see stories.js):
+//   'friends'  -- the author's accepted friends
+//   'family'   -- accounts linked to the author's family tree, either way
+//                 (family.js familyIdsOf)
+// e.g. 'friends,family'. Older rows only ever hold a single value, which is
+// still a valid list.
 db.exec(`
     CREATE TABLE IF NOT EXISTS stories (
         story_id INTEGER PRIMARY KEY AUTOINCREMENT,

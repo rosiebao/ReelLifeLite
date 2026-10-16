@@ -258,6 +258,108 @@ test("the community feed is every public story, newest first", async () => {
     assert.ok(titles.indexOf("Newer public") < titles.indexOf("Older public"));
 });
 
+test("family can be an audience, alone or alongside friends", async () => {
+    const ada = await signupAndLogin("familyteller");
+    const friend = await signupAndLogin("familyfriend");
+    const sister = await signupAndLogin("familysister");
+    const stranger = await signupAndLogin("familystranger");
+    await befriend(ada, friend);
+
+    // Sister joins Ada's tree through an invitation (which also befriends
+    // them), then stops being friends, so she's family but not a friend.
+    const put = await request("PUT", "/family", {
+        token: ada.token,
+        body: { rows: [{ members: [{ name: "Sis", relationship: "Sister" }] }, { members: [{ name: "Me", is_self: true }] }] },
+    });
+    const memberId = put.body.rows[0].members[0].member_id;
+    const invite = await request("POST", `/family/members/${memberId}/invite`, { token: ada.token, body: {} });
+    assert.equal((await request("POST", `/family/invites/${invite.body.token}/accept`, { token: sister.token })).status, 200);
+    const sisterId = (await request("GET", "/whoami", { token: sister.token })).body.id;
+    assert.equal((await request("DELETE", `/friends/${sisterId}`, { token: ada.token })).status, 200);
+
+    const publish = async (title, visibility) => {
+        const conversationId = await conversationWith(ada.token, [`${title} memory`]);
+        const res = await request("POST", "/stories", {
+            token: ada.token,
+            body: { conversation_id: conversationId, title, visibility },
+        });
+        assert.equal(res.status, 201);
+        return res.body;
+    };
+    const familyOnly = await publish("Family only", ["family"]);
+    const both = await publish("Friends and family", ["family", "friends"]);
+    const friendsOnly = await publish("Friends only", "friends");
+
+    // Stored in one order however it's sent, with the list alongside.
+    assert.equal(familyOnly.visibility, "family");
+    assert.deepEqual(familyOnly.audiences, ["family"]);
+    assert.equal(both.visibility, "friends,family");
+    assert.deepEqual(both.audiences, ["friends", "family"]);
+    assert.deepEqual(friendsOnly.audiences, ["friends"]);
+
+    const canRead = async (who, story) =>
+        (await request("GET", `/stories/${story.story_id}`, { token: who.token })).status === 200;
+    assert.equal(await canRead(sister, familyOnly), true);
+    assert.equal(await canRead(sister, both), true);
+    assert.equal(await canRead(sister, friendsOnly), false);
+    assert.equal(await canRead(friend, familyOnly), false);
+    assert.equal(await canRead(friend, both), true);
+    assert.equal(await canRead(friend, friendsOnly), true);
+    for (const story of [familyOnly, both, friendsOnly]) assert.equal(await canRead(stranger, story), false);
+
+    const feedTitles = async (who) =>
+        (await request("GET", "/stories/friends", { token: who.token })).body.map((story) => story.title).sort();
+    assert.deepEqual(await feedTitles(sister), ["Family only", "Friends and family"]);
+    assert.deepEqual(await feedTitles(friend), ["Friends and family", "Friends only"]);
+    assert.deepEqual(await feedTitles(stranger), []);
+
+    // It goes both ways: Ada is family to her sister too.
+    const sisterConversation = await conversationWith(sister.token, ["from the sister"]);
+    const sisterStory = (
+        await request("POST", "/stories", {
+            token: sister.token,
+            body: { conversation_id: sisterConversation, title: "Sister's story", visibility: ["family"] },
+        })
+    ).body;
+    assert.equal(await canRead(ada, sisterStory), true);
+    assert.ok((await feedTitles(ada)).includes("Sister's story"));
+});
+
+test("visibility combinations are normalised or refused", async () => {
+    const ada = await signupAndLogin("comboauthor");
+    const conversationId = await conversationWith(ada.token, ["a memory"]);
+    const story = (
+        await request("POST", "/stories", {
+            token: ada.token,
+            body: { conversation_id: conversationId, title: "Combo", visibility: [] },
+        })
+    ).body;
+    // Nothing picked is private.
+    assert.equal(story.visibility, "private");
+    assert.deepEqual(story.audiences, []);
+
+    const patch = (visibility) =>
+        request("PATCH", `/stories/${story.story_id}`, { token: ada.token, body: { visibility } });
+
+    // Everyone already covers friends and family.
+    const everyone = await patch(["friends", "public", "family"]);
+    assert.equal(everyone.body.visibility, "public");
+    assert.deepEqual(everyone.body.audiences, ["public"]);
+
+    const both = await patch("family, friends, family");
+    assert.equal(both.body.visibility, "friends,family");
+
+    // Private can't be mixed in, and unknown audiences are refused; neither
+    // changes what was saved.
+    assert.equal((await patch(["private", "friends"])).status, 400);
+    assert.equal((await patch(["friends", "coworkers"])).status, 400);
+    const kept = await request("GET", `/stories/${story.story_id}`, { token: ada.token });
+    assert.equal(kept.body.visibility, "friends,family");
+
+    // Each audience is matched whole, never by part of its name.
+    assert.equal((await patch("friend")).status, 400);
+});
+
 test("a story reports whether the reader is the author or their friend", async () => {
     const ada = await signupAndLogin("flagauthor");
     const friend = await signupAndLogin("flagfriend");

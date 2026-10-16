@@ -895,6 +895,59 @@ body.restoringPage main > section {
 .publishContent {
     min-height: 15vh;
 }
+/* "Who can read it": a row of tickable chips (stories.js). */
+.publishAudience {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-size: 0.9em;
+}
+.publishAudience legend {
+    margin-bottom: 5px;
+    padding: 0;
+}
+.publishForm label.audienceOption {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid #cccccc;
+    border-radius: 10px;
+    background-color: #ffffff;
+    font-size: 1em;
+    cursor: pointer;
+}
+.publishForm .audienceOption input {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    accent-color: var(--navy);
+    cursor: pointer;
+}
+.publishForm label.audienceOption:has(input:checked) {
+    border-color: #f0d49b;
+    background-color: #fdf3e1;
+}
+.publishForm label.audienceOption:focus-within {
+    outline: 3px solid var(--gold);
+    outline-offset: 1px;
+}
+/* Friends and Family while Everyone is ticked: included, not choosable. */
+.publishForm label.audienceOption.locked {
+    opacity: 0.6;
+    cursor: default;
+}
+.publishForm .audienceOption.locked input {
+    cursor: default;
+}
+.publishAudienceHint {
+    flex-basis: 100%;
+    color: #667085;
+    font-size: 0.9em;
+}
 .publishRow {
     display: flex;
     gap: 1vw;
@@ -936,9 +989,6 @@ body.restoringPage main > section {
 }
 .modalActions button:hover {
     filter: brightness(0.95);
-}
-.dangerButton {
-    background-color: #ffcfcf;
 }
 .storyModalContent {
     max-height: 45vh;

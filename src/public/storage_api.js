@@ -134,7 +134,7 @@ const storageApi = {
   },
 
   // For good: its answers, drafts and transcript. A story published from it
-  // stays up (unpublish that separately).
+  // stays up (delete that separately, from Your Stories).
   deleteConversation(conversationId) {
     return apiFetch(`/conversations/${conversationId}`, { method: "DELETE" });
   },
@@ -222,6 +222,8 @@ const storageApi = {
   // publishStory both creates and updates: publishing a conversation that's
   // already been published edits its existing story (see ../stories.js).
 
+  // `visibility`: "private", or the audiences to share with as a list --
+  // ["friends"], ["friends", "family"], ["public"] (see ../stories.js).
   publishStory({ conversationId, title, summary, content, tags, place, timePeriod, photo, visibility } = {}) {
     return apiFetch("/stories", {
       method: "POST",

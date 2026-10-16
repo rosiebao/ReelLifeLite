@@ -170,7 +170,7 @@ All endpoints below (except `/signup`, `/login`) require
 - `GET /conversations/{id}` -- a single conversation (404 if it isn't yours)
 - `DELETE /conversations/{id}` -- delete an interview for good: its prompts,
   the drafts written from it, and its transcript and media on disk. A story
-  published from it stays up (unpublish it with `DELETE /stories/{id}`); its
+  published from it stays up (delete it with `DELETE /stories/{id}`); its
   `conversation_id` becomes `null`. 404 if it isn't yours
 - `GET /conversations/{id}/prompts` -- that conversation's prompts, oldest first
 - `POST /conversations/{id}/prompts` -- `{"content", "input_media_filename"?,
@@ -214,8 +214,14 @@ tab was removed); the API stays so nothing already written is lost.
 A story is a published snapshot of a conversation: its text is copied into
 `stories.content` when it's published, so later messages don't rewrite what
 people have already read, and the conversation it came from is left alone.
-`visibility` is `private` (author only), `friends` (author + accepted
-friends, the Friends tab) or `public` (everyone, the Community tab).
+`visibility` is who can read it: `private` (author only), `public`
+(everyone, the Community tab), or any mix of `friends` (accepted friends) and
+`family` (accounts linked to the author's family tree, in either direction --
+someone in your tree, or the owner of a tree you're in). Send it as a list
+(`["friends", "family"]`) or a comma-separated string (`"friends,family"`);
+it's stored and returned as the string, in that order, alongside `audiences`
+as a list (`[]` for `private`). `public` already includes friends and family,
+so it's stored alone; `private` can't be combined with anything.
 
 - `POST /stories` -- `{"conversation_id", "title", "summary"?, "content"?,
   "tags"?, "place"?, "time_period"?, "photo"?, "visibility"?}` ->
@@ -224,8 +230,9 @@ friends, the Friends tab) or `public` (everyone, the Community tab).
   story). Publishing the same conversation again edits its story and returns
   `200` -- there's one story per conversation.
 - `GET /stories/mine` -- the caller's own stories, newest first
-- `GET /stories/friends` -- friends' stories with visibility `friends` or
-  `public` (not the caller's own)
+- `GET /stories/friends` -- stories friends and family have shared with the
+  caller: shared with `friends` by a friend, with `family` by family, or
+  `public` from either (not the caller's own)
 - `GET /stories/community` -- every `public` story, newest first, the
   caller's own included
 - `GET /stories/{id}` -- one story with its `content`, plus `is_author` and

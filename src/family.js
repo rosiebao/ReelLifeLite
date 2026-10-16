@@ -23,6 +23,27 @@ const { photoUrl } = require("./profile");
 
 const router = express.Router();
 
+// Everyone the user is family with on ReelLife: the accounts linked into
+// their own tree (an accepted invitation, or a friend added with "Add
+// member"), and the owners of trees they're linked into themselves. It goes
+// both ways, so someone who accepted your invitation reads the stories you
+// share with family, and you read theirs. Used by ../stories.js for the
+// "Family" audience.
+function familyIdsOf(userId) {
+    return db
+        .prepare(
+            `SELECT m.linked_user_id AS family_id
+             FROM family_members m JOIN family_rows r ON r.row_id = m.row_id
+             WHERE r.user_id = ? AND m.linked_user_id IS NOT NULL AND m.linked_user_id <> ?
+             UNION
+             SELECT r.user_id AS family_id
+             FROM family_members m JOIN family_rows r ON r.row_id = m.row_id
+             WHERE m.linked_user_id = ? AND r.user_id <> ?`
+        )
+        .all(userId, userId, userId, userId)
+        .map((row) => row.family_id);
+}
+
 // Generous enough for any real family tree, low enough that a bad request
 // can't fill the database.
 const MAX_ROWS = 20;
@@ -425,4 +446,4 @@ router.post("/family/invites/:token/accept", requireAuth, (req, res) => {
     res.json(invitationJson(invite));
 });
 
-module.exports = { router, getFamilyTree };
+module.exports = { router, getFamilyTree, familyIdsOf };
