@@ -1481,18 +1481,40 @@ main > section .familyTreeCard h3 {
     font-size: 1.05rem;
 }
 
-/* The tree: one band per generation, its controls in a column on the right.
-   The connector lines are an SVG under the cards (family.js draws them). */
+/* The tree: every generation's people on one line, in a scroller that moves
+   sideways when a generation is wider than the card. All the rows scroll
+   together, so the lines between them stay joined, while each generation's
+   label and controls stay pinned to the right edge (position: sticky). The
+   connector lines are an SVG under the cards (family.js draws them). */
 .familyTree {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
     transition: opacity 0.2s ease-in-out;
 }
 .familyTree.saving {
     opacity: 0.7;
     pointer-events: none;
+}
+.familyTreeScroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid #f0dfba;
+    border-radius: 12px;
+    background-color: #fdf7ea;
+    scrollbar-color: #d8c49a transparent;
+}
+.familyTreeScroll:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+/* As wide as its widest row, and at least as wide as the scroller. Every row
+   stretches to that width, so narrower generations are centred under the
+   widest one. */
+.familyTreeCanvas {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    min-width: 100%;
 }
 .familyLines {
     position: absolute;
@@ -1509,22 +1531,38 @@ main > section .familyTreeCard h3 {
 .familyBand {
     display: flex;
     align-items: stretch;
-    border: 1px solid #f0dfba;
-    border-radius: 12px;
+}
+/* A faint line between generations. */
+.familyBand + .familyBand {
+    border-top: 1px dashed #f0dfba;
+}
+.familyBandMembers {
+    display: flex;
+    flex: 1 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 18px 20px;
+}
+/* Pinned to the right of the scroller; its background hides any line that
+   would pass behind it, and it sits above them. */
+.familyBandSide {
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    width: 128px;
+    padding: 8px 10px;
+    border-left: 1px solid #f0dfba;
     background-color: #fdf7ea;
 }
-.familyBandMain {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    padding: 34px 14px 16px;
-}
 .familyBandLabel {
-    position: absolute;
-    top: 8px;
-    left: 10px;
-    /* Over the connector lines, which can pass behind it. */
-    z-index: 2;
+    align-self: flex-start;
     padding: 3px 10px;
     border-radius: 6px;
     background-color: #f7e5bd;
@@ -1532,18 +1570,13 @@ main > section .familyTreeCard h3 {
     font-size: 0.8rem;
     font-weight: 700;
 }
-.familyBandMembers {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-evenly;
-    gap: 14px 28px;
-}
-/* Above the lines, so a line never runs across a card. */
+/* Above the lines, so a line never runs across a card. Cards never shrink:
+   a full row scrolls rather than squeezing them. */
 .familyCard {
     position: relative;
     z-index: 2;
     display: flex;
+    flex: none;
     align-items: center;
     gap: 12px;
     width: 200px;
@@ -1636,13 +1669,8 @@ main > section .familyTreeCard h3 {
 }
 .familyRowControls {
     display: flex;
-    flex: none;
     flex-direction: column;
-    justify-content: center;
     gap: 5px;
-    width: 96px;
-    padding: 8px 8px 8px 12px;
-    border-left: 1px solid #f0dfba;
 }
 .familyRowButton {
     display: flex;
@@ -2904,27 +2932,17 @@ main > section h3.communityHeading {
     .familyTreeCard {
         padding: 16px 10px 12px;
     }
-    /* Two cards to a line, couples get split up, and the controls sit
-       between the bands -- the lines would cross all of it. The bands, top
-       to bottom, already say who comes before whom. */
-    .familyLines {
-        display: none;
-    }
-    .familyBand {
-        flex-direction: column;
-    }
-    .familyBandMain {
-        padding: 34px 8px 14px;
-    }
+    /* Smaller cards, still on one line per generation (the tree scrolls
+       sideways), and each generation's controls become a row of icons. */
     .familyBandMembers {
-        gap: 12px 10px;
+        gap: 14px;
+        padding: 14px 12px;
     }
     .familyCard,
     .familyCard.compact {
         flex-direction: column;
         gap: 6px;
-        width: calc(50% - 10px);
-        max-width: 150px;
+        width: 116px;
         padding: 10px 6px;
         text-align: center;
     }
@@ -2936,17 +2954,24 @@ main > section h3.communityHeading {
         width: 48px;
         height: 48px;
     }
+    .familyBandSide {
+        width: 92px;
+        padding: 6px;
+    }
+    .familyBandLabel {
+        font-size: 0.72rem;
+    }
     .familyRowControls {
         flex-direction: row;
         flex-wrap: wrap;
-        justify-content: center;
-        width: auto;
-        padding: 8px;
-        border-top: 1px solid #f0dfba;
-        border-left: none;
+        gap: 4px;
     }
+    /* Icons only; the button's label stays for screen readers (aria-label). */
     .familyRowButton {
-        padding: 6px 8px;
+        padding: 6px;
+    }
+    .familyRowButton span {
+        display: none;
     }
     .familyTreeFooter {
         flex-direction: column;

@@ -52,6 +52,8 @@ const MAX_NAME_LENGTH = 100;
 const MAX_PHOTO_LENGTH = 2048;
 const MAX_RELATIONSHIP_LENGTH = 50;
 const MAX_EMAIL_LENGTH = 254;
+// Parents a member can be joined to (two, plus room for step-parents).
+const MAX_PARENTS = 4;
 const DEFAULT_MEMBER_NAME = "Unnamed";
 const DEFAULT_MEMBER_PHOTO = "profile.jpg";
 
@@ -106,8 +108,28 @@ function parseFamilyTree(body) {
                 }),
                 email: optionalEmail(member?.email),
                 linked_user_id: optionalId(member?.linked_user_id),
+                parents: member?.parents,
             };
         });
+    });
+
+    // `parents`: who this member is a child of, as positions in the row
+    // directly above (so members not saved yet can be named too). Left out,
+    // the member keeps the parents they have; [] means none.
+    parsed.forEach((members, rowIndex) => {
+        const above = rowIndex > 0 ? parsed[rowIndex - 1].length : 0;
+        for (const member of members) {
+            if (member.parents === undefined) continue;
+            const parents = member.parents;
+            if (
+                !Array.isArray(parents) ||
+                parents.some((index) => !Number.isInteger(index) || index < 0 || index >= above)
+            ) {
+                throw new ApiError(400, "A member's parents must be people in the generation directly above");
+            }
+            if (new Set(parents).size !== parents.length) throw new ApiError(400, "A parent appears twice");
+            if (parents.length > MAX_PARENTS) throw new ApiError(400, `A member can have at most ${MAX_PARENTS} parents`);
+        }
     });
 
     // is_self marks the account holder's own node. Exactly one member can be
@@ -159,22 +181,52 @@ const MEMBER_SELECT = `
     FROM family_members m
     LEFT JOIN users u ON u.id = m.linked_user_id`;
 
+// The tree's parent links: Map(child member_id -> Set of parent member_ids).
+function parentLinksOf(userId) {
+    const links = new Map();
+    const rows = db
+        .prepare(
+            `SELECT fp.child_id, fp.parent_id FROM family_parents fp
+             JOIN family_members m ON m.member_id = fp.child_id
+             JOIN family_rows r ON r.row_id = m.row_id
+             WHERE r.user_id = ?`
+        )
+        .all(userId);
+    for (const { child_id: childId, parent_id: parentId } of rows) {
+        if (!links.has(childId)) links.set(childId, new Set());
+        links.get(childId).add(parentId);
+    }
+    return links;
+}
+
 // `seeded` is how the page tells "never opened the Family tab" apart from
 // "deleted every row on purpose" -- both have no rows, but only the first
-// should get the starting layout.
+// should get the starting layout. Each member's `parents` are positions in
+// the row above, the same as PUT /family takes. `parents_saved` is false for
+// a tree whose parents were never saved (one from before they existed).
 function getFamilyTree(userId) {
     const owner = db.prepare("SELECT photo FROM users WHERE id = ?").get(userId);
     const rows = db
         .prepare("SELECT row_id FROM family_rows WHERE user_id = ? ORDER BY position")
         .all(userId);
     const membersOf = db.prepare(`${MEMBER_SELECT} WHERE m.row_id = ? ORDER BY m.position`);
-    const seeded = db.prepare("SELECT 1 FROM family_state WHERE user_id = ?").get(userId);
+    const state = db.prepare("SELECT parents_saved FROM family_state WHERE user_id = ?").get(userId);
+    const links = parentLinksOf(userId);
 
+    const memberRows = rows.map((row) => membersOf.all(row.row_id));
     return {
-        rows: rows.map((row) => ({
-            members: membersOf.all(row.row_id).map((member) => memberJson(member, owner)),
-        })),
-        seeded: Boolean(seeded),
+        rows: memberRows.map((members, rowIndex) => {
+            const above = rowIndex > 0 ? memberRows[rowIndex - 1].map((member) => member.member_id) : [];
+            return {
+                members: members.map((member) => {
+                    const mine = links.get(member.member_id) || new Set();
+                    const parents = above.flatMap((id, index) => (mine.has(id) ? [index] : []));
+                    return { ...memberJson(member, owner), parents };
+                }),
+            };
+        }),
+        seeded: Boolean(state),
+        parents_saved: Boolean(state?.parents_saved),
     };
 }
 
@@ -260,11 +312,15 @@ function saveFamilyTree(userId, tree) {
         .prepare("SELECT row_id FROM family_rows WHERE user_id = ? ORDER BY position")
         .all(userId);
     const existingIds = existingMembersOf(userId).map((member) => member.member_id);
+    // Read before anything changes: members sent without `parents` keep these.
+    const existingLinks = parentLinksOf(userId);
+    const sendsParents = tree.flat().some((member) => member.parents !== undefined);
 
     db.exec("BEGIN");
     try {
         // Any save marks the account as set up, an empty tree included.
         db.prepare("INSERT OR IGNORE INTO family_state (user_id, seeded_at) VALUES (?, ?)").run(userId, now);
+        if (sendsParents) db.prepare("UPDATE family_state SET parents_saved = 1 WHERE user_id = ?").run(userId);
 
         const rowIds = matched.map((members, rowIndex) => {
             const rowId = existingRows[rowIndex]?.row_id;
@@ -280,6 +336,8 @@ function saveFamilyTree(userId, tree) {
         });
 
         const kept = new Set();
+        // Every member's id once written, by [row][position], for the links.
+        const idGrid = matched.map(() => []);
         matched.forEach((members, rowIndex) => {
             members.forEach((member, position) => {
                 const values = [
@@ -293,11 +351,12 @@ function saveFamilyTree(userId, tree) {
                     member.linked_user_id,
                 ];
                 if (member.member_id === null) {
-                    db.prepare(
+                    const info = db.prepare(
                         `INSERT INTO family_members
                          (row_id, position, name, photo, is_self, relationship, email, linked_user_id, created_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     ).run(...values, now);
+                    idGrid[rowIndex][position] = Number(info.lastInsertRowid);
                     return;
                 }
                 db.prepare(
@@ -307,17 +366,37 @@ function saveFamilyTree(userId, tree) {
                      WHERE member_id = ?`
                 ).run(...values, member.member_id);
                 kept.add(member.member_id);
+                idGrid[rowIndex][position] = member.member_id;
             });
         });
 
-        // Members the new tree no longer has (their invitations go with
-        // them), then rows past the end of it.
+        // Members the new tree no longer has (their invitations and parent
+        // links go with them), then rows past the end of it.
         for (const memberId of existingIds) {
             if (!kept.has(memberId)) db.prepare("DELETE FROM family_members WHERE member_id = ?").run(memberId);
         }
         for (const row of existingRows.slice(matched.length)) {
             db.prepare("DELETE FROM family_rows WHERE row_id = ?").run(row.row_id);
         }
+
+        // Parent links, rewritten for the whole tree. A parent is always in
+        // the row directly above, so a link left behind by a move between
+        // generations (or a generation added or removed between the two) is
+        // dropped rather than drawn as a line skipping a generation.
+        const clearLinks = db.prepare("DELETE FROM family_parents WHERE child_id = ?");
+        const addLink = db.prepare("INSERT INTO family_parents (child_id, parent_id) VALUES (?, ?)");
+        matched.forEach((members, rowIndex) => {
+            const above = rowIndex > 0 ? idGrid[rowIndex - 1] : [];
+            members.forEach((member, position) => {
+                const childId = idGrid[rowIndex][position];
+                const parentIds =
+                    member.parents !== undefined
+                        ? member.parents.map((index) => above[index])
+                        : [...(existingLinks.get(childId) || [])].filter((id) => above.includes(id));
+                clearLinks.run(childId);
+                for (const parentId of parentIds) addLink.run(childId, parentId);
+            });
+        });
         db.exec("COMMIT");
     } catch (err) {
         db.exec("ROLLBACK");

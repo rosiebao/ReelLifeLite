@@ -79,7 +79,7 @@ test("a new user starts with an empty, unseeded tree", async () => {
     const token = await signupAndLogin("newcomer", "newcomer@example.com");
     const got = await request("GET", "/family", { token });
     assert.equal(got.status, 200);
-    assert.deepEqual(got.body, { rows: [], seeded: false });
+    assert.deepEqual(got.body, { rows: [], seeded: false, parents_saved: false });
 });
 
 test("saved tree comes back on the next fetch", async () => {
@@ -100,11 +100,11 @@ test("an emptied tree stays empty instead of being reseeded", async () => {
     await request("PUT", "/family", { token, body: tree(["Grandma"], ["Mom"], ["Me"]) });
 
     const emptied = await request("PUT", "/family", { token, body: { rows: [] } });
-    assert.deepEqual(emptied.body, { rows: [], seeded: true });
+    assert.deepEqual(emptied.body, { rows: [], seeded: true, parents_saved: false });
 
     // Still empty, and still flagged as seeded, on every later fetch.
-    assert.deepEqual((await request("GET", "/family", { token })).body, { rows: [], seeded: true });
-    assert.deepEqual((await request("GET", "/family", { token })).body, { rows: [], seeded: true });
+    assert.deepEqual((await request("GET", "/family", { token })).body, { rows: [], seeded: true, parents_saved: false });
+    assert.deepEqual((await request("GET", "/family", { token })).body, { rows: [], seeded: true, parents_saved: false });
 });
 
 test("seeded is per user", async () => {
@@ -121,7 +121,7 @@ test("a tree belongs only to the user who saved it", async () => {
     const grace = await signupAndLogin("grace", "grace@example.com");
 
     await request("PUT", "/family", { token: ada, body: tree(["Ada's mom"]) });
-    assert.deepEqual((await request("GET", "/family", { token: grace })).body, { rows: [], seeded: false });
+    assert.deepEqual((await request("GET", "/family", { token: grace })).body, { rows: [], seeded: false, parents_saved: false });
 
     await request("PUT", "/family", { token: grace, body: tree(["Grace's mom"]) });
     assert.deepEqual(basic((await request("GET", "/family", { token: ada })).body), saved(["Ada's mom"]));
@@ -139,6 +139,7 @@ test("saving replaces rows and members, including removals", async () => {
     assert.deepEqual((await request("PUT", "/family", { token, body: { rows: [] } })).body, {
         rows: [],
         seeded: true,
+        parents_saved: false,
     });
 });
 
@@ -405,4 +406,92 @@ test("you can't invite yourself", async () => {
     const res = await request("POST", `/family/members/${me.member_id}/invite`, { token, body: {} });
     assert.equal(res.status, 400);
 });
+
+// ---- Parent links ----
+
+// A tree given as rows of [name, parents?] pairs, parents being positions in
+// the row above.
+function linkedTree(...rows) {
+    return {
+        rows: rows.map((members) => ({
+            members: members.map(([name, parents]) => ({ name, ...(parents ? { parents } : {}) })),
+        })),
+    };
+}
+
+const parentsOf = (body) => body.rows.map((row) => row.members.map((member) => member.parents));
+
+test("parent links round-trip and mark the tree as having them", async () => {
+    const token = await signupAndLogin("linker", "linker@example.com");
+    const body = linkedTree([["Grandma"], ["Grandpa"]], [["Mom", [0, 1]], ["Aunt", [0, 1]], ["Dad"]], [["Me", [0, 2]]]);
+    const put = await request("PUT", "/family", { token, body });
+    assert.equal(put.status, 200);
+    assert.equal(put.body.parents_saved, true);
+    // Members sent without parents (the top row, Dad) have none.
+    assert.deepEqual(parentsOf(put.body), [[[], []], [[0, 1], [0, 1], []], [[0, 2]]]);
+    assert.deepEqual((await request("GET", "/family", { token })).body, put.body);
+});
+
+test("a tree saved without parents isn't marked as having them", async () => {
+    const token = await signupAndLogin("unlinked", "unlinked@example.com");
+    const put = await request("PUT", "/family", { token, body: tree(["Mom", "Dad"], ["Me"]) });
+    assert.equal(put.body.parents_saved, false);
+    assert.deepEqual(parentsOf(put.body), [[[], []], [[]]]);
+});
+
+test("parent links follow members by id when the row above is reordered", async () => {
+    const token = await signupAndLogin("reorder", "reorder@example.com");
+    const first = (
+        await request("PUT", "/family", { token, body: linkedTree([["Mom"], ["Dad"]], [["Me", [1]]]) })
+    ).body;
+    const [mom, dad] = first.rows[0].members;
+    const me = first.rows[1].members[0];
+
+    // Dad moves to the front; Me is sent without parents, so keeps Dad.
+    const swapped = {
+        rows: [{ members: [dad, mom].map(({ member_id, name }) => ({ member_id, name })) }, { members: [{ member_id: me.member_id, name: "Me" }] }],
+    };
+    const put = (await request("PUT", "/family", { token, body: swapped })).body;
+    assert.deepEqual(put.rows[1].members[0].parents, [0]);
+    assert.equal(put.rows[0].members[0].name, "Dad");
+});
+
+test("removing a parent, or moving a child away from them, drops the link", async () => {
+    const token = await signupAndLogin("unlinker", "unlinker@example.com");
+    const first = (
+        await request("PUT", "/family", {
+            token,
+            body: linkedTree([["Mom"], ["Dad"]], [["Me", [0, 1]], ["Sis", [0, 1]]], [["Kid"]]),
+        })
+    ).body;
+    const ids = first.rows.map((row) => row.members.map(({ member_id, name }) => ({ member_id, name })));
+
+    // Mom goes: Me and Sis keep only Dad, now at position 0.
+    const withoutMom = { rows: [{ members: [ids[0][1]] }, { members: ids[1] }, { members: ids[2] }] };
+    const put = (await request("PUT", "/family", { token, body: withoutMom })).body;
+    assert.deepEqual(parentsOf(put), [[[]], [[0], [0]], [[]]]);
+
+    // Sis moves down a generation: her link to Dad (now two rows up) goes.
+    const moved = { rows: [{ members: [ids[0][1]] }, { members: [ids[1][0]] }, { members: [...ids[2], ids[1][1]] }] };
+    const after = (await request("PUT", "/family", { token, body: moved })).body;
+    assert.deepEqual(parentsOf(after), [[[]], [[0]], [[], []]]);
+});
+
+test("parents must be distinct people in the row directly above", async () => {
+    const token = await signupAndLogin("badlinks", "badlinks@example.com");
+    await request("PUT", "/family", { token, body: linkedTree([["Mom"]], [["Me", [0]]]) });
+    for (const bad of [
+        linkedTree([["Mom", [0]]]), // the top row has no one above it
+        linkedTree([["Mom"]], [["Me", [1]]]), // past the end of the row above
+        linkedTree([["Mom"]], [["Me", [0, 0]]]), // twice
+        linkedTree([["Mom"]], [["Me", ["0"]]]), // not a position
+        { rows: [{ members: [{ name: "Mom" }] }, { members: [{ name: "Me", parents: 0 }] }] }, // not a list
+        linkedTree([["A"], ["B"], ["C"], ["D"], ["E"]], [["Me", [0, 1, 2, 3, 4]]]), // too many
+    ]) {
+        assert.equal((await request("PUT", "/family", { token, body: bad })).status, 400, JSON.stringify(bad));
+    }
+    // None of those changed what was saved.
+    assert.deepEqual(parentsOf((await request("GET", "/family", { token })).body), [[[]], [[0]]]);
+});
+
 

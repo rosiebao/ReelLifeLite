@@ -303,13 +303,22 @@ server, `photo_url` (your profile photo for your own node, the linked
 account's for someone on ReelLife), `status` (`self`, `joined`, `invited`,
 `not_invited`) and `linked_user` (`{id, username}` once they're on ReelLife).
 
-- `GET /family` -> `{"rows", "seeded"}`. `seeded` is false until the first
-  save, which is how the page knows to start a new account off with a tree.
+- `GET /family` -> `{"rows", "seeded", "parents_saved"}`. `seeded` is false
+  until the first save, which is how the page knows to start a new account off
+  with a tree. Each member also has `parents`: who they're a child of, as
+  positions in the row directly above (`[]` for none). `parents_saved` is
+  false for a tree whose parents have never been saved (one from before they
+  existed); the page then works them out from the layout until the next save.
 - `PUT /family` -- the whole tree. Send `member_id` back for members already
   saved and they're updated in place, even if they moved to another
   generation; members left out are removed (with their invitation). A member
   can be linked to an account with `linked_user_id`, but only to one of your
   friends (an existing link is always kept), and only once per tree.
+  `parents` (optional, up to 4) are positions in the row directly above, so
+  members without an id yet can be named too; left out, a member keeps the
+  parents they have. A parent must be in the generation directly above
+  (`400` otherwise); a link that stops being so -- the child moved to another
+  generation, or one was put between them -- is dropped.
 - `POST /family/members/{id}/invite` -- `{"email"?}` -> `{"token", "member"}`.
   Makes an invitation, or returns the existing one so a link already sent
   keeps working. The page turns the token into `index.html?invite=<token>`
@@ -344,12 +353,14 @@ the other side agrees. Declining deletes the row, so the pair can try again.
 - `public/login.html` + `loginScript.js` -- login/signup form
 - `public/index.html` + `profile.js` -- the session gate for the page, and the
   profile tab: photo and personal details (Save/Cancel)
-- `public/family.js` -- the Family tab: the tree (one band per generation,
-  with + Member / − Member / + Layer / × Layer beside it), the panel for the
+- `public/family.js` -- the Family tab: the tree (each generation on one line,
+  however many people are in it -- the tree scrolls left and right -- with
+  + Member / − Member / + Layer / × Layer pinned beside it), the panel for the
   selected person (invite by email or link), Add member (a friend already on
   ReelLife) and Invite family (someone new). Adding asks who they're related
   to (the selected person to start with) and how, and works out their
-  generation and relationship to you from that. Also offers an invitation link
+  generation, relationship to you, parent links and place in the row from
+  that. Lines join only parents to their children. Also offers an invitation link
   that was opened (`?invite=`; `authGuard.js` keeps it across signing in)
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
   topic, start an interview, answer (typed, or out loud with 🎤 / ✋

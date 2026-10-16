@@ -179,6 +179,27 @@ db.exec(`
     )
 `);
 
+// Who is whose parent in a tree: one row per parent of each member, the
+// parent always in the generation directly above (family.js). The lines on
+// the Family page join exactly these. A member removed from the tree takes
+// their links with them.
+db.exec(`
+    CREATE TABLE IF NOT EXISTS family_parents (
+        child_id INTEGER NOT NULL REFERENCES family_members(member_id) ON DELETE CASCADE,
+        parent_id INTEGER NOT NULL REFERENCES family_members(member_id) ON DELETE CASCADE,
+        PRIMARY KEY (child_id, parent_id)
+    )
+`);
+db.exec("CREATE INDEX IF NOT EXISTS family_parents_parent ON family_parents (parent_id)");
+
+// parents_saved: whether the tree's parent links have ever been saved. Trees
+// saved before links existed have none, and the page works them out once from
+// the relationships (public/family.js) -- this is how it knows to.
+const familyStateColumns = db.prepare("PRAGMA table_info(family_state)").all();
+if (!familyStateColumns.some((column) => column.name === "parents_saved")) {
+    db.exec("ALTER TABLE family_state ADD COLUMN parents_saved INTEGER NOT NULL DEFAULT 0");
+}
+
 // Anyone who already had a tree before family_state existed counts as seeded.
 db.exec(`
     INSERT OR IGNORE INTO family_state (user_id, seeded_at)

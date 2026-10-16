@@ -8,10 +8,12 @@
 //
 // The model mirrors the API payload:
 //   { rows: [ { members: [ { member_id, name, photo, photo_url, is_self,
-//       relationship, email, status, invited_at, linked_user } ] } ] }
+//       relationship, email, status, invited_at, linked_user, parents } ] } ] }
 // Row 1 is the top of the tree. member_id is null for someone added here and
 // not saved yet. status comes from the server: "self", "joined" (linked to a
-// ReelLife account), "invited" or "not_invited".
+// ReelLife account), "invited" or "not_invited". `parents` are this member's
+// parents as positions in the row directly above; the tree's lines join
+// exactly those (see "Connector lines").
 //
 // Names and relationships are typed by the user and usernames come from other
 // accounts, so all of it goes in as textContent, never as HTML.
@@ -26,7 +28,8 @@ const FAMILY_INVITE_PARAM = "invite";
 const PENDING_INVITE_KEY = "reellife_pending_invite";
 
 // What a brand-new account starts with: two generations above you, and a
-// sibling to show where brothers and sisters go.
+// sibling to show where brothers and sisters go. Mom's parents are the first
+// two grandparents and Dad's the other two.
 const STARTING_TREE = {
     rows: [
         {
@@ -39,14 +42,14 @@ const STARTING_TREE = {
         },
         {
             members: [
-                { name: "Mom", relationship: "Mother" },
-                { name: "Dad", relationship: "Father" },
+                { name: "Mom", relationship: "Mother", parents: [0, 1] },
+                { name: "Dad", relationship: "Father", parents: [2, 3] },
             ],
         },
         {
             members: [
-                { name: "Me", is_self: true },
-                { name: "Sister", relationship: "Sister" },
+                { name: "Me", is_self: true, parents: [0, 1] },
+                { name: "Sister", relationship: "Sister", parents: [0, 1] },
             ],
         },
     ],
@@ -138,6 +141,9 @@ function normalizeMember(member) {
         status,
         invited_at: member?.invited_at || null,
         linked_user: linkedUser,
+        // Kept as given here; normalizeFamilyTree drops any that don't point
+        // at someone in the row above.
+        parents: Array.isArray(member?.parents) ? member.parents.filter(Number.isInteger) : [],
     };
 }
 
@@ -145,14 +151,22 @@ function normalizeMember(member) {
 // caller's object) can't break rendering or be changed by accident.
 function normalizeFamilyTree(raw) {
     const rows = Array.isArray(raw?.rows) ? raw.rows : [];
-    return {
+    const tree = {
         rows: rows.map((row) => ({
             members: (Array.isArray(row?.members) ? row.members : []).map(normalizeMember),
         })),
     };
+    tree.rows.forEach((row, rowIndex) => {
+        const above = rowIndex > 0 ? tree.rows[rowIndex - 1].members.length : 0;
+        for (const member of row.members) {
+            member.parents = [...new Set(member.parents)].filter((index) => index >= 0 && index < above);
+        }
+    });
+    return tree;
 }
 
-// What PUT /family takes.
+// What PUT /family takes. Parents are sent as positions in the row above,
+// which also covers members who don't have an id yet.
 function treePayload(tree) {
     return {
         rows: tree.rows.map((row) => ({
@@ -164,6 +178,7 @@ function treePayload(tree) {
                 relationship: member.relationship,
                 email: member.email,
                 linked_user_id: member.linked_user?.id ?? null,
+                parents: member.parents,
             })),
         })),
     };
@@ -255,9 +270,32 @@ function handleFamilyError(err, action) {
 // left empty.
 async function loadFamilyTree() {
     const payload = await storageApi.getFamily();
-    const stored = normalizeFamilyTree(payload);
+    const stored = treeFromServer(payload);
     if (payload?.seeded || stored.rows.length > 0) return stored;
-    return normalizeFamilyTree(await storageApi.saveFamily(treePayload(normalizeFamilyTree(STARTING_TREE))));
+    return treeFromServer(await storageApi.saveFamily(treePayload(normalizeFamilyTree(STARTING_TREE))));
+}
+
+// A tree saved before parents were recorded has none. Until its next save
+// they're worked out the way its lines used to be drawn: the people in a
+// generation taken in pairs (1-2, 3-4, ...) as couples, and the generation
+// below shared out among those couples in order.
+function guessParents(tree) {
+    tree.rows.forEach((row, rowIndex) => {
+        if (rowIndex === 0) return;
+        const above = tree.rows[rowIndex - 1].members.length;
+        const couples = Math.ceil(above / 2);
+        if (couples === 0) return;
+        row.members.forEach((member, childIndex) => {
+            const couple = Math.floor((childIndex * couples) / row.members.length);
+            member.parents = [couple * 2, couple * 2 + 1].filter((index) => index < above);
+        });
+    });
+    return tree;
+}
+
+function treeFromServer(payload) {
+    const tree = normalizeFamilyTree(payload);
+    return payload?.parents_saved ? tree : guessParents(tree);
 }
 
 // Pulls the server's copy in and draws it.
@@ -277,12 +315,12 @@ async function persistFamilyTree(action) {
     renderFamilyPage();
     let saved = false;
     try {
-        familyTree = normalizeFamilyTree(await storageApi.saveFamily(treePayload(familyTree)));
+        familyTree = treeFromServer(await storageApi.saveFamily(treePayload(familyTree)));
         saved = true;
     } catch (err) {
         handleFamilyError(err, action);
         try {
-            familyTree = normalizeFamilyTree(await storageApi.getFamily());
+            familyTree = treeFromServer(await storageApi.getFamily());
         } catch (refetchErr) {
             // Can't reach the server to ask, so undo the change instead.
             familyTree = normalizeFamilyTree(lastSavedTree);
@@ -298,16 +336,119 @@ async function persistFamilyTree(action) {
 // another save is still out, in which case the click is ignored.
 async function editFamilyTree(action, change) {
     if (!familyLoaded || familySaveInFlight) return false;
-    if (change() === false) return false;
+    if (withParentRefs(change) === false) return false;
     return persistFamilyTree(action);
+}
+
+// Parents are stored as positions in the row above, which an edit (someone
+// removed or moved, a generation added) shifts. So for the length of one
+// edit each member holds `parentRefs` -- the parent members themselves --
+// and afterwards those are turned back into positions. A parent who is no
+// longer in the row directly above (removed, or a generation now between
+// them) is dropped. Members created during the edit can set `parentRefs`
+// themselves; ones with none (a reset tree, a new generation) keep their
+// `parents` as they are.
+function withParentRefs(change) {
+    familyTree.rows.forEach((row, rowIndex) => {
+        const above = rowIndex > 0 ? familyTree.rows[rowIndex - 1].members : [];
+        for (const member of row.members) {
+            member.parentRefs = member.parents.map((index) => above[index]).filter(Boolean);
+        }
+    });
+    try {
+        return change();
+    } finally {
+        familyTree.rows.forEach((row, rowIndex) => {
+            const above = rowIndex > 0 ? familyTree.rows[rowIndex - 1].members : [];
+            for (const member of row.members) {
+                if (member.parentRefs !== undefined) {
+                    const positions = member.parentRefs.map((parent) => above.indexOf(parent));
+                    member.parents = [...new Set(positions.filter((index) => index >= 0))].slice(0, FAMILY_MAX_PARENTS);
+                }
+                delete member.parentRefs;
+            }
+        });
+    }
+}
+
+// Matches MAX_PARENTS in ../family.js.
+const FAMILY_MAX_PARENTS = 4;
+
+// Everyone who shares a child with `member` (their partners, as far as the
+// tree knows). Only valid inside withParentRefs.
+function coParentsOf(member) {
+    const partners = new Set();
+    for (const { member: other } of allFamilyMembers()) {
+        if (other.parentRefs?.includes(member)) {
+            for (const parent of other.parentRefs) if (parent !== member) partners.add(parent);
+        }
+    }
+    return [...partners];
+}
+
+// Joins someone just added to the person they were added next to ("Related
+// to ... As their ..."), so the tree's lines go where they should:
+//   parent  -- they become one of that person's parents
+//   child   -- that person (and anyone they've had children with) are theirs
+//   sibling -- they get the same parents
+//   partner -- they become a parent of that person's children too
+// Inside withParentRefs; links that don't fit the generations chosen are
+// dropped there.
+function linkNewMember(draft, anchor, kind) {
+    if (!anchor) return;
+    const addParent = (child, parent) => {
+        if (!child.parentRefs.includes(parent)) child.parentRefs.push(parent);
+    };
+    if (kind === "parent") addParent(anchor, draft);
+    else if (kind === "child") draft.parentRefs = [anchor, ...coParentsOf(anchor)];
+    else if (kind === "sibling") draft.parentRefs = [...anchor.parentRefs];
+    else if (kind === "spouse") {
+        for (const { member } of allFamilyMembers()) {
+            if (member !== draft && member.parentRefs?.includes(anchor)) addParent(member, draft);
+        }
+    }
+}
+
+// Moves someone just added (last in row `rowIndex`) next to the people they
+// belong with, so their lines stay short: a partner or sibling right after
+// the person they were added to, a child among the children of the same
+// parents (ordered as the parents are), a parent beside that person's other
+// parents. Anything else stays at the end of the row. Inside withParentRefs.
+function placeNewMember(rowIndex, draft, anchor, kind) {
+    const members = familyTree.rows[rowIndex].members;
+    const above = rowIndex > 0 ? familyTree.rows[rowIndex - 1].members : [];
+    // Where someone's parents sit in the row above, on average.
+    const parentSpot = (member) => {
+        const spots = (member.parentRefs || []).map((parent) => above.indexOf(parent)).filter((i) => i >= 0);
+        return spots.length ? spots.reduce((sum, i) => sum + i, 0) / spots.length : null;
+    };
+
+    let at = -1;
+    if ((kind === "spouse" || kind === "sibling") && members.includes(anchor)) {
+        at = members.indexOf(anchor) + 1;
+    } else if (kind === "child") {
+        const mine = parentSpot(draft);
+        if (mine !== null) {
+            const later = members.findIndex((member) => member !== draft && (parentSpot(member) ?? -1) > mine);
+            if (later !== -1) at = later;
+        }
+    } else if (kind === "parent") {
+        const others = members.filter((member) => member !== draft && anchor?.parentRefs?.includes(member));
+        if (others.length) at = Math.max(...others.map((member) => members.indexOf(member))) + 1;
+    }
+    if (at === -1) return;
+    members.splice(members.indexOf(draft), 1);
+    members.splice(Math.min(at, members.length), 0, draft);
 }
 
 // ---- Members ----
 
 // `details` is { name, relationship, email, linked_user }. `rowIndex` is a
 // generation, or -1 / rows.length for a new one above / below the tree
-// (created in the same save). Returns the saved member, or null.
-async function addFamilyMember(rowIndex, details = {}) {
+// (created in the same save). `relation` ({ anchorId, kind }) is who they
+// were added next to and how, for the parent links. Returns the saved
+// member, or null.
+async function addFamilyMember(rowIndex, details = {}, relation = null) {
     if (!Number.isInteger(rowIndex) || rowIndex < -1 || rowIndex > familyTree.rows.length) return null;
     const draft = normalizeMember({ ...details, is_self: false, member_id: null });
     let target = rowIndex;
@@ -318,7 +459,13 @@ async function addFamilyMember(rowIndex, details = {}) {
         } else if (target === familyTree.rows.length) {
             familyTree.rows.push({ members: [] });
         }
+        draft.parentRefs = [];
         familyTree.rows[target].members.push(draft);
+        if (relation) {
+            const anchor = findFamilyMember(relation.anchorId)?.member;
+            linkNewMember(draft, anchor, relation.kind);
+            placeNewMember(target, draft, anchor, relation.kind);
+        }
     });
     if (!saved) return null;
     // The server gave the new member an id; it's the last one in that row.
@@ -452,10 +599,12 @@ function showsCardStatus(member) {
     return member.status === "invited" || (member.status === "not_invited" && Boolean(member.email));
 }
 
-function memberCard(member, rowIndex, compact) {
+function memberCard(member, rowIndex, compact, memberIndex) {
     const card = el("button", "familyCard");
     card.type = "button";
     card.dataset.memberId = member.member_id ?? "";
+    // Where they sit in their row, which is what `parents` refers to.
+    card.dataset.index = String(memberIndex);
     card.classList.toggle("compact", compact);
     card.classList.toggle("isSelf", member.is_self);
     const selected = selectedFamilyEntry()?.member === member;
@@ -514,26 +663,27 @@ function rowControls(rowIndex, row) {
     return controls;
 }
 
+// One generation: its people on a single line -- the row never wraps, however
+// many there are; the tree scrolls sideways instead -- and, pinned to the
+// right edge of the tree as it scrolls, the generation's name and controls.
+// Cards keep their full size.
 function familyBand(row, rowIndex) {
     const band = el("div", "familyBand");
     band.dataset.row = String(rowIndex);
     band.classList.toggle("isSelfRow", row.members.some((member) => member.is_self));
 
-    const main = el("div", "familyBandMain");
-    main.append(el("span", "familyBandLabel", generationLabel(rowIndex)));
-
     const members = el("div", "familyBandMembers");
-    // Four or more people to a generation get the narrower, upright card.
-    const compact = row.members.length >= 4;
-    row.members.forEach((member) => members.append(memberCard(member, rowIndex, compact)));
+    row.members.forEach((member, memberIndex) => members.append(memberCard(member, rowIndex, false, memberIndex)));
     if (row.members.length === 0) {
         const add = el("button", "familyBandEmpty", "No one here yet -- add someone");
         add.type = "button";
         add.addEventListener("click", () => openFamilyModal("new", { rowIndex }));
         members.append(add);
     }
-    main.append(members);
-    band.append(main, rowControls(rowIndex, row));
+
+    const side = el("div", "familyBandSide");
+    side.append(el("span", "familyBandLabel", generationLabel(rowIndex)), rowControls(rowIndex, row));
+    band.append(members, side);
     return band;
 }
 
@@ -547,7 +697,11 @@ function renderEmptyFamilyTree() {
     familyEls.tree.append(empty);
 }
 
+// All the generations sit in one scroller, so they scroll sideways together
+// and the lines between them stay joined.
 function renderFamilyTreeBands() {
+    // Keep the sideways scroll across a redraw (selecting someone, a save).
+    const previousScroll = familyEls.tree.querySelector(".familyTreeScroll")?.scrollLeft ?? 0;
     familyEls.tree.innerHTML = "";
     familyEls.tree.classList.toggle("saving", familySaveInFlight);
     familyEls.tree.setAttribute("aria-busy", String(familySaveInFlight || !familyLoaded));
@@ -555,23 +709,54 @@ function renderFamilyTreeBands() {
         renderEmptyFamilyTree();
         return;
     }
-    familyTree.rows.forEach((row, rowIndex) => familyEls.tree.append(familyBand(row, rowIndex)));
 
+    const scroll = el("div", "familyTreeScroll");
+    scroll.tabIndex = 0;
+    scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", "Family tree -- scroll sideways to see everyone");
+    const canvas = el("div", "familyTreeCanvas");
     const lines = document.createElementNS(SVG_NS, "svg");
     lines.classList.add("familyLines");
     lines.setAttribute("aria-hidden", "true");
-    familyEls.tree.prepend(lines);
+    canvas.append(lines);
+    familyTree.rows.forEach((row, rowIndex) => canvas.append(familyBand(row, rowIndex)));
+    scroll.append(canvas);
+    familyEls.tree.append(scroll);
+    scroll.scrollLeft = previousScroll;
+    layoutFamilyTree();
+}
+
+// Run whenever the tree is drawn or changes size.
+function layoutFamilyTree() {
+    centerFamilyTreeOnSelf();
     drawFamilyLines();
+}
+
+// The first time the tree can be seen, scroll it sideways so your own card is
+// in the middle -- in a wide family you might otherwise start off-screen.
+// After that the tree stays wherever it's been scrolled to.
+let familyTreeCentered = false;
+function centerFamilyTreeOnSelf() {
+    if (familyTreeCentered) return;
+    const scroll = familyEls.tree.querySelector(".familyTreeScroll");
+    if (!scroll || scroll.clientWidth === 0) return; // hidden: tried again when the tab opens
+    familyTreeCentered = true;
+    const self = scroll.querySelector(".familyCard.isSelf");
+    if (!self || scroll.scrollWidth <= scroll.clientWidth) return;
+    const side = scroll.querySelector(".familyBandSide")?.offsetWidth ?? 0;
+    const visible = scroll.clientWidth - side;
+    const cardMiddle = self.getBoundingClientRect().left - scroll.getBoundingClientRect().left + scroll.scrollLeft + self.offsetWidth / 2;
+    scroll.scrollLeft = Math.max(0, cardMiddle - visible / 2);
 }
 
 // ---- Connector lines ----
 //
-// The tree doesn't record who is whose child, so the lines follow the layout
-// instead: the people in a generation are taken in pairs (1-2, 3-4, ...) as
-// couples, joined side by side, and each couple drops a line to the people
-// below them -- the next generation is shared out among the couples above in
-// order. With the starting tree that's each set of grandparents down to one
-// parent, and the parents down to you and your sister.
+// Each person is joined to their own parents (`parents` in the model) -- and
+// only that: no lines between partners or siblings. A child's parents are
+// joined by a short bar under them, a line drops from its middle to a rail
+// halfway down to the next generation, and from the rail a line drops to
+// each of their children. Children of the same set of parents share one rail.
+// Someone with one parent in the tree hangs from that parent alone.
 
 function svgLine(svg, x1, y1, x2, y2) {
     const line = document.createElementNS(SVG_NS, "line");
@@ -582,6 +767,8 @@ function svgLine(svg, x1, y1, x2, y2) {
     svg.append(line);
 }
 
+// Where a card sits within the tree's canvas (which is what scrolls), so the
+// lines line up however far it's been scrolled.
 function cardBox(card, origin) {
     const rect = card.getBoundingClientRect();
     return {
@@ -590,69 +777,76 @@ function cardBox(card, origin) {
         top: rect.top - origin.top,
         bottom: rect.bottom - origin.top,
         centerX: rect.left - origin.left + rect.width / 2,
-        middleY: rect.top - origin.top + rect.height / 2,
     };
 }
 
-// Where a couple (or a single person) drops its line from.
-function coupleAnchors(svg, boxes) {
-    const anchors = [];
-    for (let i = 0; i < boxes.length; i += 2) {
-        const a = boxes[i];
-        const b = boxes[i + 1];
-        // Partners that wrapped onto different lines (a narrow screen) are
-        // treated as two people on their own.
-        if (b && Math.abs(a.middleY - b.middleY) < 8) {
-            svgLine(svg, a.right, a.middleY, b.left, b.middleY);
-            anchors.push({ x: (a.right + b.left) / 2, y: a.middleY, bottom: Math.max(a.bottom, b.bottom) });
-        } else {
-            anchors.push({ x: a.centerX, y: a.bottom, bottom: a.bottom });
-            if (b) anchors.push({ x: b.centerX, y: b.bottom, bottom: b.bottom });
-        }
-    }
-    return anchors;
+// Gathers each row's children by their set of parents: [{ parents: [boxes],
+// children: [boxes] }], so brothers and sisters share one line down.
+function parentGroups(rowIndex, boxesPerRow) {
+    const groups = new Map();
+    const above = boxesPerRow[rowIndex - 1] || [];
+    familyTree.rows[rowIndex].members.forEach((member, memberIndex) => {
+        const child = boxesPerRow[rowIndex][memberIndex];
+        const parents = member.parents.filter((index) => above[index]);
+        if (!child || parents.length === 0) return;
+        const key = [...parents].sort((a, b) => a - b).join(",");
+        if (!groups.has(key)) groups.set(key, { parents: parents.map((index) => above[index]), children: [] });
+        groups.get(key).children.push(child);
+    });
+    return [...groups.values()];
 }
 
 function drawFamilyLines() {
-    const svg = familyEls.tree.querySelector(".familyLines");
+    const canvas = familyEls.tree.querySelector(".familyTreeCanvas");
+    const svg = canvas?.querySelector(".familyLines");
     if (!svg) return;
     svg.innerHTML = "";
-    const origin = familyEls.tree.getBoundingClientRect();
+    const origin = canvas.getBoundingClientRect();
     if (origin.width === 0) return;
-    svg.setAttribute("width", origin.width);
-    svg.setAttribute("height", origin.height);
+    svg.setAttribute("width", canvas.scrollWidth);
+    svg.setAttribute("height", canvas.scrollHeight);
 
-    const bands = [...familyEls.tree.querySelectorAll(".familyBand")];
-    const boxesPerRow = bands.map((band) =>
-        [...band.querySelectorAll(".familyCard")].map((card) => cardBox(card, origin))
-    );
+    // Cards by [row][position], matching the model.
+    const boxesPerRow = [...canvas.querySelectorAll(".familyBand")].map((band) => {
+        const boxes = [];
+        band.querySelectorAll(".familyCard").forEach((card) => {
+            boxes[Number(card.dataset.index)] = cardBox(card, origin);
+        });
+        return boxes;
+    });
 
-    boxesPerRow.forEach((boxes, rowIndex) => {
-        if (boxes.length === 0) return;
-        const children = boxesPerRow[rowIndex + 1];
-        // Only parents are drawn as couples: people at the bottom of the tree
-        // (you and your siblings, say) just hang from the line above them.
-        if (!children || children.length === 0) return;
-        const anchors = coupleAnchors(svg, boxes);
+    familyTree.rows.forEach((row, rowIndex) => {
+        if (rowIndex === 0 || !boxesPerRow[rowIndex]) return;
+        const groups = parentGroups(rowIndex, boxesPerRow);
+        // Groups that would share a rail are staggered, so two families'
+        // lines never run along each other.
+        const parentsBottom = Math.max(...(boxesPerRow[rowIndex - 1] || []).filter(Boolean).map((box) => box.bottom));
+        const childrenTop = Math.min(...boxesPerRow[rowIndex].filter(Boolean).map((box) => box.top));
+        const gap = childrenTop - parentsBottom;
+        groups.forEach((group, groupIndex) => {
+            const offset = groups.length > 1 ? ((groupIndex + 1) / (groups.length + 1) - 0.5) * gap * 0.5 : 0;
+            const railY = parentsBottom + gap / 2 + offset;
+            const parentXs = group.parents.map((box) => box.centerX);
+            const parentBottom = Math.max(...group.parents.map((box) => box.bottom));
+            // Each parent drops to a bar just under them; the family's line
+            // goes down from the middle of that bar.
+            const barY = parentBottom + Math.min(12, (railY - parentBottom) / 2);
+            group.parents.forEach((box) => svgLine(svg, box.centerX, box.bottom, box.centerX, barY));
+            if (parentXs.length > 1) svgLine(svg, Math.min(...parentXs), barY, Math.max(...parentXs), barY);
+            const dropX = (Math.min(...parentXs) + Math.max(...parentXs)) / 2;
+            svgLine(svg, dropX, barY, dropX, railY);
 
-        anchors.forEach((anchor, coupleIndex) => {
-            const mine = children.filter(
-                (_, childIndex) => Math.floor((childIndex * anchors.length) / children.length) === coupleIndex
-            );
-            if (mine.length === 0) return;
-            const childTop = Math.min(...mine.map((child) => child.top));
-            const busY = anchor.bottom + (childTop - anchor.bottom) / 2;
-            svgLine(svg, anchor.x, anchor.y, anchor.x, busY);
-            const xs = [anchor.x, ...mine.map((child) => child.centerX)];
-            svgLine(svg, Math.min(...xs), busY, Math.max(...xs), busY);
-            mine.forEach((child) => svgLine(svg, child.centerX, busY, child.centerX, child.top));
+            const childXs = group.children.map((box) => box.centerX);
+            const xs = [dropX, ...childXs];
+            svgLine(svg, Math.min(...xs), railY, Math.max(...xs), railY);
+            group.children.forEach((box) => svgLine(svg, box.centerX, railY, box.centerX, box.top));
         });
     });
 }
 
 // Cards move whenever the page is resized or the icon font arrives.
 if (familyEls.tree && "ResizeObserver" in window) {
-    new ResizeObserver(() => drawFamilyLines()).observe(familyEls.tree);
+    new ResizeObserver(() => layoutFamilyTree()).observe(familyEls.tree);
 }
 
 // ---- The detail panel ----
@@ -793,9 +987,10 @@ function renderFamilyMemberList() {
         row.append(avatarImg(member, "familyListPhoto"), text, statusBadge(member));
         row.addEventListener("click", () => {
             selectFamilyMember(member.member_id);
+            // Scrolls the tree sideways (and the page down) to their card.
             familyEls.tree
                 .querySelector(`.familyCard[data-member-id="${member.member_id}"]`)
-                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                ?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
         });
         item.append(row);
         familyEls.memberList.append(item);
@@ -823,7 +1018,9 @@ function selectFamilyMember(memberId) {
 async function createInvitation(member, email) {
     const result = await storageApi.inviteFamilyMember(member.member_id, email === undefined ? {} : { email });
     const entry = findFamilyMember(member.member_id);
-    if (entry) Object.assign(entry.member, normalizeMember(result.member));
+    // The invite reply doesn't carry the tree's parent links; keep the ones
+    // the member has.
+    if (entry) Object.assign(entry.member, normalizeMember(result.member), { parents: entry.member.parents });
     lastSavedTree = normalizeFamilyTree(familyTree);
     return inviteLinkFor(result.token);
 }
@@ -1263,13 +1460,24 @@ async function submitFamilyModal() {
     }
 
     closeFamilyModal();
-    const added = await addFamilyMember(rowIndex, {
-        name,
-        relationship,
-        email: mode === "friend" ? "" : email,
-        linked_user: linkedUser,
-        status: linkedUser ? "joined" : "not_invited",
-    });
+    // Who they were added next to, and how, places their lines in the tree.
+    const relatedAs = RELATION_ROLES[familyEls.relatedAs.value];
+    const anchorId = Number(familyEls.relatedTo.value);
+    const relation =
+        relatedAs && !familyEls.relatedField.classList.contains("hidden") && findFamilyMember(anchorId)
+            ? { anchorId, kind: relatedAs.kind }
+            : null;
+    const added = await addFamilyMember(
+        rowIndex,
+        {
+            name,
+            relationship,
+            email: mode === "friend" ? "" : email,
+            linked_user: linkedUser,
+            status: linkedUser ? "joined" : "not_invited",
+        },
+        relation
+    );
     if (!added || mode === "friend" || !email) return;
 
     // Added someone new with an email: write the invitation straight away.
@@ -1400,7 +1608,7 @@ function wireFamilyPage() {
     // then also picks up an invitation someone accepted, or a new profile
     // photo, since the page was loaded.
     $("#family").click(() => {
-        setTimeout(drawFamilyLines, 0);
+        setTimeout(layoutFamilyTree, 0);
         if (familyLoaded && !familySaveInFlight && familyEls.modal.classList.contains("hidden")) {
             refreshFamilyTree().catch(() => {
                 // Keep showing what's there; the next edit will report a problem.
