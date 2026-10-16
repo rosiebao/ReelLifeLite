@@ -57,7 +57,7 @@ const STARTING_TREE = {
 
 const STATUS_LABELS = {
     self: "You",
-    joined: "On ReelLife",
+    joined: "ReelLife member",
     invited: "Invited",
     not_invited: "Not invited",
 };
@@ -74,9 +74,15 @@ const familyEls = {
     modalTitle: document.querySelector("#familyModalTitle"),
     modalIntro: document.querySelector("#familyModalIntro"),
     form: document.querySelector("#familyMemberForm"),
-    friendField: document.querySelector("#familyFriendField"),
-    friendSelect: document.querySelector("#familyFriendSelect"),
-    friendEmpty: document.querySelector("#familyFriendEmpty"),
+    searchField: document.querySelector("#familySearchField"),
+    searchInput: document.querySelector("#familySearchInput"),
+    searchBtn: document.querySelector("#familySearchBtn"),
+    searchResults: document.querySelector("#familySearchResults"),
+    searchEmpty: document.querySelector("#familySearchEmpty"),
+    searchPicked: document.querySelector("#familySearchPicked"),
+    requestsBlock: document.querySelector("#familyRequestsBlock"),
+    requestCount: document.querySelector("#familyRequestCount"),
+    requestList: document.querySelector("#familyRequestList"),
     name: document.querySelector("#familyNameInput"),
     relationship: document.querySelector("#familyRelationshipInput"),
     generationField: document.querySelector("#familyGenerationField"),
@@ -86,7 +92,6 @@ const familyEls = {
     relatedAs: document.querySelector("#familyRelatedAsSelect"),
     emailField: document.querySelector("#familyEmailField"),
     email: document.querySelector("#familyEmailInput"),
-    modeSwitch: document.querySelector("#familyModalSwitch"),
     modalError: document.querySelector("#familyModalError"),
     modalCancel: document.querySelector("#familyModalCancel"),
     modalSubmit: document.querySelector("#familyModalSubmit"),
@@ -141,6 +146,12 @@ function normalizeMember(member) {
         status,
         invited_at: member?.invited_at || null,
         linked_user: linkedUser,
+        // Who a pending family request went to ({ id, username }); set by the
+        // server only, never sent back on a save.
+        requested_user:
+            !isSelf && !linkedUser && Number.isInteger(member?.requested_user?.id)
+                ? { id: member.requested_user.id, username: String(member.requested_user.username ?? "") }
+                : null,
         // Kept as given here; normalizeFamilyTree drops any that don't point
         // at someone in the row above.
         parents: Array.isArray(member?.parents) ? member.parents.filter(Number.isInteger) : [],
@@ -166,7 +177,9 @@ function normalizeFamilyTree(raw) {
 }
 
 // What PUT /family takes. Parents are sent as positions in the row above,
-// which also covers members who don't have an id yet.
+// which also covers members who don't have an id yet. `request_username` is
+// only on a member just added with Search member: it sends their family
+// request in the same save, so they're invited from the start.
 function treePayload(tree) {
     return {
         rows: tree.rows.map((row) => ({
@@ -179,6 +192,7 @@ function treePayload(tree) {
                 email: member.email,
                 linked_user_id: member.linked_user?.id ?? null,
                 parents: member.parents,
+                ...(member.request_username ? { request_username: member.request_username } : {}),
             })),
         })),
     };
@@ -451,7 +465,13 @@ function placeNewMember(rowIndex, draft, anchor, kind) {
 async function addFamilyMember(rowIndex, details = {}, relation = null) {
     if (!Number.isInteger(rowIndex) || rowIndex < -1 || rowIndex > familyTree.rows.length) return null;
     const draft = normalizeMember({ ...details, is_self: false, member_id: null });
+    // Search member: who to send the family request to, with this save.
+    if (details.request_username) {
+        draft.request_username = details.request_username;
+        draft.status = "invited";
+    }
     let target = rowIndex;
+    let placedAt = -1;
     const saved = await editFamilyTree("add that family member", () => {
         if (target === -1) {
             familyTree.rows.unshift({ members: [] });
@@ -466,10 +486,12 @@ async function addFamilyMember(rowIndex, details = {}, relation = null) {
             linkNewMember(draft, anchor, relation.kind);
             placeNewMember(target, draft, anchor, relation.kind);
         }
+        // Where they ended up (placeNewMember can move them next to family),
+        // to find them again in the server's copy.
+        placedAt = familyTree.rows[target].members.indexOf(draft);
     });
     if (!saved) return null;
-    // The server gave the new member an id; it's the last one in that row.
-    const added = familyTree.rows[target]?.members.at(-1) || null;
+    const added = familyTree.rows[target]?.members[placedAt] || null;
     if (added) selectedMemberId = added.member_id;
     renderFamilyPage();
     return added;
@@ -544,7 +566,12 @@ function confirmRowRemoval(row, rowIndex) {
 }
 
 function confirmMemberRemoval(member) {
-    const invited = member.status === "invited" ? " Their invitation link will stop working." : "";
+    const invited =
+        member.status !== "invited"
+            ? ""
+            : member.requested_user
+              ? " Their family request will be cancelled."
+              : " Their invitation link will stop working.";
     return confirm(`Remove ${member.name} from your family tree?${invited}`);
 }
 
@@ -634,8 +661,7 @@ function rowControls(rowIndex, row) {
 
     controls.append(
         // Most people added to a generation (grandparents, say) aren't on
-        // ReelLife, so this asks for a name; the dialog links to the friend
-        // picker for those who are.
+        // ReelLife, so this asks for a name, and an email to invite them.
         controlButton("person-add-outline", "Member", `Add someone to ${label}`, () =>
             openFamilyModal("new", { rowIndex })
         ),
@@ -877,6 +903,28 @@ function panelButton(className, iconName, label, onClick) {
 function detailInviteSection(member) {
     const section = el("div", "familyDetailInvite");
     const firstName = member.name.split(" ")[0];
+    // A family request to someone already on ReelLife: invited the same as by
+    // email, so the same wording, with who it went to and a way to cancel it
+    // -- there's no email to send again.
+    if (member.requested_user) {
+        section.append(
+            el(
+                "p",
+                "familyDetailText",
+                `You invited ${firstName}${member.invited_at ? ` on ${shortFamilyDate(member.invited_at)}` : ""} ` +
+                    `with a family request to @${member.requested_user.username}. ` +
+                    `They'll take this place in your tree when they accept.`
+            ),
+            panelButton("familySecondaryButton", "close-circle-outline", "Cancel request", () =>
+                cancelFamilyRequestFor(member)
+            )
+        );
+        if (detailMessage?.memberId === member.member_id) {
+            section.append(el("p", "familyDetailMessage", detailMessage.text));
+        }
+        section.append(infoNote("Family requests work like friend requests: they accept it from their Family page."));
+        return section;
+    }
     section.append(
         el(
             "p",
@@ -917,10 +965,115 @@ function detailInviteSection(member) {
     return section;
 }
 
+// ---- Shared stories (a relative who's on ReelLife) ----
+//
+// Selecting someone linked to a ReelLife account lists the stories they've
+// shared with you (GET /users/:id/stories -- only what you're allowed to
+// read), each opening in the story reader. Fetched when they're selected and
+// kept for the visit, so redrawing the panel (a save, another click) doesn't
+// fetch again; selecting them anew after visiting someone else does.
+
+const SHARED_STORY_SORTS = {
+    newest: { label: "Newest first", compare: (a, b) => b.created_at.localeCompare(a.created_at) },
+    oldest: { label: "Oldest first", compare: (a, b) => a.created_at.localeCompare(b.created_at) },
+};
+// { userId, status: "loading" | "ready" | "error", stories, sort }
+let sharedStories = null;
+
+async function loadSharedStories(userId) {
+    sharedStories = { userId, status: "loading", stories: [], sort: sharedStories?.sort || "newest" };
+    try {
+        const stories = await storageApi.listUserStories(userId);
+        if (sharedStories?.userId !== userId) return; // someone else was picked meanwhile
+        sharedStories = { ...sharedStories, status: "ready", stories };
+    } catch (err) {
+        if (sharedStories?.userId !== userId) return;
+        sharedStories = { ...sharedStories, status: "error", error: familyErrorText(err) };
+    }
+    if (selectedFamilyEntry()?.member.linked_user?.id === userId) renderFamilyDetail();
+}
+
+function sharedStoryRow(story) {
+    const item = el("li", "sharedStory");
+    const open = () => {
+        if (typeof openStoryReader === "function") openStoryReader(story.story_id);
+    };
+
+    // The cover is a picture from the story (or a soft placeholder), drawn by
+    // stories.js like the Friends cards.
+    const cover = el("button", "sharedStoryCover");
+    cover.type = "button";
+    cover.setAttribute("aria-label", `Read "${story.title}"`);
+    if (typeof communityCover === "function") cover.append(communityCover(story));
+    cover.addEventListener("click", open);
+
+    const body = el("div", "sharedStoryBody");
+    const top = el("div", "sharedStoryTop");
+    top.append(el("h4", "sharedStoryTitle", story.title));
+    if (typeof bookmarkButton === "function") top.append(bookmarkButton(story));
+    body.append(top);
+    if (typeof storyDate === "function") body.append(el("p", "sharedStoryDate", storyDate(story)));
+    if (story.summary) body.append(el("p", "sharedStorySummary", story.summary));
+
+    const read = el("button", "sharedStoryRead");
+    read.type = "button";
+    read.append(el("span", "", "Read story"), icon("arrow-forward-outline"));
+    read.addEventListener("click", open);
+    body.append(read);
+
+    item.append(cover, body);
+    return item;
+}
+
+function sharedStoriesSection(member) {
+    const section = el("div", "sharedStories");
+    const userId = member.linked_user?.id;
+    if (!userId) return section;
+    if (sharedStories?.userId !== userId) loadSharedStories(userId);
+    const state = sharedStories;
+
+    const head = el("div", "sharedStoriesHead");
+    const title = el("div", "sharedStoriesTitle");
+    const count = state.status === "ready" ? ` · ${state.stories.length}` : "";
+    title.append(el("h4", "", `Shared stories${count}`), el("p", "", "Stories shared with you"));
+    head.append(title);
+    if (state.status === "ready" && state.stories.length > 1) {
+        const sort = el("select", "sharedStoriesSort");
+        sort.setAttribute("aria-label", "Sort stories");
+        for (const [value, { label }] of Object.entries(SHARED_STORY_SORTS)) {
+            const option = el("option", "", label);
+            option.value = value;
+            sort.append(option);
+        }
+        sort.value = state.sort;
+        sort.addEventListener("change", () => {
+            sharedStories.sort = sort.value;
+            renderFamilyDetail();
+        });
+        head.append(sort);
+    }
+    section.append(head);
+
+    if (state.status === "loading") {
+        section.append(el("p", "familyDetailText", "Loading their stories…"));
+    } else if (state.status === "error") {
+        section.append(el("p", "familyError", `Couldn't load their stories: ${state.error}.`));
+    } else if (state.stories.length === 0) {
+        section.append(el("p", "familyDetailText", `${member.name} hasn't shared any stories with you yet.`));
+    } else {
+        const list = el("ul", "sharedStoryList");
+        [...state.stories].sort(SHARED_STORY_SORTS[state.sort].compare).forEach((story) => list.append(sharedStoryRow(story)));
+        section.append(list);
+    }
+    section.append(infoNote("Only stories shared with you appear here."));
+    return section;
+}
+
 function renderFamilyDetail() {
     const panel = familyEls.detail;
     panel.innerHTML = "";
     const entry = selectedFamilyEntry();
+    panel.classList.toggle("isMember", entry?.member.status === "joined" && !entry.member.is_self);
     if (!entry) {
         panel.append(el("p", "familyDetailText", "Add someone to your tree to see their details here."));
         return;
@@ -939,15 +1092,7 @@ function renderFamilyDetail() {
             infoNote("Add the people around you with the + Member buttons, or invite them to ReelLife.")
         );
     } else if (member.status === "joined") {
-        const username = member.linked_user?.username;
-        panel.append(
-            el(
-                "p",
-                "familyDetailText",
-                `${member.name} is on ReelLife${username ? ` as @${username}` : ""}. You're friends and family, so ` +
-                    "the stories they share with friends or family show up on your Friends page."
-            )
-        );
+        panel.append(sharedStoriesSection(member));
     } else {
         panel.append(detailInviteSection(member));
     }
@@ -1006,6 +1151,8 @@ function renderFamilyPage() {
 }
 
 function selectFamilyMember(memberId) {
+    // Picking someone (again) fetches their stories afresh.
+    if (memberId !== selectedMemberId || findFamilyMember(memberId)?.member.status === "joined") sharedStories = null;
     selectedMemberId = memberId;
     if (detailMessage?.memberId !== memberId) detailMessage = null;
     renderFamilyPage();
@@ -1089,13 +1236,13 @@ async function copyInviteLink(member, errorEl) {
 // ---- The add / edit dialog ----
 //
 // One form for every way someone gets into the tree:
-//   "friend"  Add member  -- someone already on ReelLife: pick a friend
-//   "new"     + Member / Invite family -- someone not on ReelLife: a name,
-//             and an email to invite them (required for Invite family)
+//   "search"  Search member -- someone already on ReelLife: find them by
+//             username, and they get a family request to accept
+//   "new"     + Member / Invite family -- a name, and an email to invite
+//             them to ReelLife (required for Invite family)
 //   "edit"    Edit details -- anyone already in the tree
 
 let familyModal = null; // { mode, memberId, requireEmail, derivedRelationship }
-let familyFriends = [];
 
 // ---- "Related to ... as their ..." ----
 //
@@ -1301,59 +1448,112 @@ function fillGenerationSelect(selectedRow, { allowNew = false } = {}) {
     familyEls.generation.value = String(Math.max(lowest, Math.min(selectedRow, highest)));
 }
 
-// Friends who aren't in the tree yet. Switching modes quickly can start a
-// second load before the first answers; only the latest one fills the list.
-let familyFriendLoad = 0;
-async function loadFamilyFriendOptions() {
-    const load = ++familyFriendLoad;
-    familyEls.friendSelect.innerHTML = "";
-    familyEls.friendSelect.disabled = true;
-    familyEls.friendEmpty.classList.add("hidden");
-    try {
-        familyFriends = await storageApi.listFriends();
-    } catch (err) {
-        familyFriends = [];
-    }
-    if (load !== familyFriendLoad || familyModal?.mode !== "friend") return;
-    const inTree = new Set(allFamilyMembers().map(({ member }) => member.linked_user?.id).filter(Boolean));
-    const available = familyFriends.filter((friend) => !inTree.has(friend.id));
-    available.forEach((friend) => {
-        const option = el("option", "", friend.username);
-        option.value = String(friend.id);
-        familyEls.friendSelect.append(option);
-    });
-    familyEls.friendSelect.disabled = available.length === 0;
-    familyEls.friendEmpty.classList.toggle("hidden", available.length > 0);
-    familyEls.modalSubmit.disabled = available.length === 0;
-    if (available.length) familyEls.name.value = available[0].username;
-}
-
 function setFamilyModalError(message) {
     familyEls.modalError.textContent = message || "";
     familyEls.modalError.classList.toggle("hidden", !message);
 }
 
 const FAMILY_MODAL_TEXT = {
-    friend: {
-        title: "Add a family member",
-        intro: "Someone who's already on ReelLife. Pick them from your friends.",
-        submit: "Add to tree",
-        switchText: "Not on ReelLife yet? Invite them instead",
+    search: {
+        title: "Search for a family member",
+        intro: "Find someone who's already on ReelLife. They'll get a family request to accept, like a friend request.",
+        submit: "Send family request",
     },
     new: {
         title: "Add a family member",
         intro: "Add them to your tree. Give an email address to invite them to ReelLife too.",
         submit: "Add to tree",
-        switchText: "Already on ReelLife? Pick from your friends",
     },
     invite: {
         title: "Invite family",
         intro: "Add someone who's new to ReelLife, and invite them by email.",
         submit: "Add and invite",
-        switchText: "Already on ReelLife? Pick from your friends",
     },
-    edit: { title: "Edit details", intro: "", submit: "Save", switchText: "" },
+    edit: { title: "Edit details", intro: "", submit: "Save" },
 };
+
+// ---- Search member: finding someone on ReelLife ----
+
+// What a search result row says when it can't be picked.
+const FAMILY_SEARCH_NOTES = {
+    in_tree: "Already in your tree",
+    requested: "Family request sent",
+};
+
+// The person picked from the search ({ id, username }), or null.
+function pickFamilySearchResult(person) {
+    familyModal.searchPick = person;
+    familyEls.searchPicked.textContent = person
+        ? `Sending a family request to @${person.username}. Fill in how they're related to you, then send it.`
+        : "";
+    familyEls.searchPicked.classList.toggle("hidden", !person);
+    if (person && !familyEls.name.value.trim()) familyEls.name.value = person.username;
+    renderFamilySearchResults();
+    setFamilyModalError("");
+}
+
+function familySearchRow(person) {
+    const item = el("li", "personRow");
+    const avatar = el("img", "personAvatar");
+    avatar.src = person.photo_url || DEFAULT_MEMBER_PHOTO;
+    avatar.alt = "";
+    const text = el("div", "personText");
+    text.append(el("span", "personName", person.username));
+    const note = FAMILY_SEARCH_NOTES[person.family_status];
+    if (note) text.append(el("span", "personNote", note));
+    item.append(avatar, text);
+    if (person.family_status === "none") {
+        const picked = familyModal?.searchPick?.id === person.id;
+        const pick = el("button", picked ? "primaryButton picked" : "primaryButton", picked ? "Selected" : "Select");
+        pick.type = "button";
+        pick.setAttribute("aria-pressed", String(picked));
+        pick.addEventListener("click", () => pickFamilySearchResult(picked ? null : person));
+        const actions = el("div", "personActions");
+        actions.append(pick);
+        item.append(actions);
+    }
+    return item;
+}
+
+let familySearchResultsList = [];
+function renderFamilySearchResults() {
+    familyEls.searchResults.innerHTML = "";
+    familySearchResultsList.forEach((person) => familyEls.searchResults.append(familySearchRow(person)));
+}
+
+// Only the latest search fills the list, however the replies arrive.
+let familySearchRun = 0;
+async function runFamilySearch() {
+    const query = familyEls.searchInput.value.trim();
+    const run = ++familySearchRun;
+    familyEls.searchEmpty.classList.add("hidden");
+    if (!query) {
+        familySearchResultsList = [];
+        renderFamilySearchResults();
+        return;
+    }
+    let results = [];
+    try {
+        results = await storageApi.searchFamilyMembers(query);
+    } catch (err) {
+        if (run === familySearchRun) setFamilyModalError(`Couldn't search: ${familyErrorText(err)}.`);
+        return;
+    }
+    if (run !== familySearchRun || familyModal?.mode !== "search") return;
+    familySearchResultsList = results;
+    renderFamilySearchResults();
+    familyEls.searchEmpty.classList.toggle("hidden", results.length > 0);
+}
+
+function resetFamilySearch() {
+    familySearchRun++;
+    familySearchResultsList = [];
+    familyEls.searchInput.value = "";
+    familyEls.searchResults.innerHTML = "";
+    familyEls.searchEmpty.classList.add("hidden");
+    familyEls.searchPicked.classList.add("hidden");
+    familyEls.searchPicked.textContent = "";
+}
 
 // `options`: rowIndex (where to add), memberId (who to edit), requireEmail.
 function openFamilyModal(mode, options = {}) {
@@ -1374,17 +1574,17 @@ function openFamilyModal(mode, options = {}) {
         memberId: editing?.member.member_id ?? null,
         requireEmail: Boolean(options.requireEmail),
         derivedRelationship: null,
+        searchPick: null,
     };
+    resetFamilySearch();
+    familyEls.searchField.classList.toggle("hidden", mode !== "search");
 
     const text = FAMILY_MODAL_TEXT[textKey];
     familyEls.modalTitle.textContent = editing ? `Edit ${displayName(editing.member)}` : text.title;
     familyEls.modalIntro.textContent = text.intro;
     familyEls.modalIntro.classList.toggle("hidden", !text.intro);
     familyEls.modalSubmit.textContent = text.submit;
-    // Picking a friend waits for the list (loadFamilyFriendOptions turns it on).
-    familyEls.modalSubmit.disabled = mode === "friend";
-    familyEls.modeSwitch.textContent = text.switchText;
-    familyEls.modeSwitch.classList.toggle("hidden", !text.switchText);
+    familyEls.modalSubmit.disabled = false;
 
     const row = options.rowIndex ?? editing?.rowIndex ?? Math.max(0, selfRowIndex());
     fillGenerationSelect(row, { allowNew: !editing });
@@ -1397,8 +1597,8 @@ function openFamilyModal(mode, options = {}) {
     familyEls.relatedField.classList.toggle("hidden", Boolean(editing) || allFamilyMembers().length === 0);
     if (!editing) {
         fillRelatedSelects(options.relatedToId, options.relatedAs);
-        // A + Member button already chose the generation; anything else
-        // (or a choice carried over by the mode switch) goes by the relation.
+        // A + Member button already chose the generation; anything else goes
+        // by the relation.
         if (options.relatedAs) {
             familyModal.derivedRelationship = options.derivedRelationship ?? null;
             applyRelatedChoice();
@@ -1406,32 +1606,38 @@ function openFamilyModal(mode, options = {}) {
     }
 
     const member = editing?.member;
-    familyEls.friendField.classList.toggle("hidden", mode !== "friend");
-    familyEls.emailField.classList.toggle("hidden", mode === "friend" || member?.is_self || member?.status === "joined");
+    // Someone already on ReelLife (or you, or someone found by searching) has
+    // no emailed invitation to send.
+    familyEls.emailField.classList.toggle(
+        "hidden",
+        mode === "search" || Boolean(member?.is_self) || member?.status === "joined"
+    );
     familyEls.emailField.querySelector("span").textContent = familyModal.requireEmail
         ? "Email address"
         : "Email address (optional)";
     setFamilyModalError("");
     familyEls.modal.classList.remove("hidden");
-    if (mode === "friend") loadFamilyFriendOptions();
-    (mode === "friend" ? familyEls.friendSelect : familyEls.name).focus();
+    (mode === "search" ? familyEls.searchInput : familyEls.name).focus();
 }
 
 function closeFamilyModal() {
     familyModal = null;
+    resetFamilySearch();
     familyEls.modal.classList.add("hidden");
 }
 
 async function submitFamilyModal() {
     if (!familyModal || familySaveInFlight) return;
     const { mode, memberId, requireEmail } = familyModal;
+    const searchPick = mode === "search" ? familyModal.searchPick : null;
     const name = familyEls.name.value.trim();
     const relationship = familyEls.relationship.value.trim();
-    const email = familyEls.email.value.trim();
+    const email = mode === "search" ? "" : familyEls.email.value.trim();
     const rowIndex = Number(familyEls.generation.value);
 
+    if (mode === "search" && !searchPick) return setFamilyModalError("Search for them, then select who to send it to.");
     if (!name) return setFamilyModalError("Please give their name.");
-    if (mode !== "friend" && (email || requireEmail) && !isEmailAddress(email)) {
+    if ((email || requireEmail) && !isEmailAddress(email)) {
         return setFamilyModalError("Please enter a valid email address.");
     }
 
@@ -1451,14 +1657,6 @@ async function submitFamilyModal() {
         return;
     }
 
-    let linkedUser = null;
-    if (mode === "friend") {
-        const friendId = Number(familyEls.friendSelect.value);
-        const friend = familyFriends.find((candidate) => candidate.id === friendId);
-        if (!friend) return setFamilyModalError("Pick one of your friends.");
-        linkedUser = { id: friend.id, username: friend.username };
-    }
-
     closeFamilyModal();
     // Who they were added next to, and how, places their lines in the tree.
     const relatedAs = RELATION_ROLES[familyEls.relatedAs.value];
@@ -1467,18 +1665,29 @@ async function submitFamilyModal() {
         relatedAs && !familyEls.relatedField.classList.contains("hidden") && findFamilyMember(anchorId)
             ? { anchorId, kind: relatedAs.kind }
             : null;
+    // Search member: they're added and sent the family request in one save,
+    // so they're invited from the moment they appear, like an emailed invite.
     const added = await addFamilyMember(
         rowIndex,
         {
             name,
             relationship,
-            email: mode === "friend" ? "" : email,
-            linked_user: linkedUser,
-            status: linkedUser ? "joined" : "not_invited",
+            email,
+            linked_user: null,
+            status: searchPick ? "invited" : "not_invited",
+            ...(searchPick ? { request_username: searchPick.username } : {}),
         },
         relation
     );
-    if (!added || mode === "friend" || !email) return;
+    if (added && searchPick) {
+        detailMessage = {
+            memberId: added.member_id,
+            text: `Family request sent to @${searchPick.username}. They'll take this place in your tree when they accept.`,
+        };
+        renderFamilyPage();
+        return;
+    }
+    if (!added || !email) return;
 
     // Added someone new with an email: write the invitation straight away.
     try {
@@ -1489,6 +1698,89 @@ async function submitFamilyModal() {
         detailMessage = { memberId: added.member_id, text: `They're in your tree, but the invitation failed: ${familyErrorText(err)}.` };
     }
     renderFamilyPage();
+}
+
+// ---- Family requests (sending) ----
+// Sent with the save that adds the member (submitFamilyModal), so they're
+// invited from the moment they appear. Cancelling leaves them in the tree.
+
+async function cancelFamilyRequestFor(member) {
+    const who = member.requested_user ? `@${member.requested_user.username}` : member.name;
+    if (!confirm(`Cancel the family request to ${who}? ${member.name} stays in your tree.`)) return;
+    try {
+        const result = await storageApi.cancelFamilyRequest(member.member_id);
+        const entry = findFamilyMember(member.member_id);
+        if (entry) Object.assign(entry.member, normalizeMember(result.member), { parents: entry.member.parents });
+        lastSavedTree = normalizeFamilyTree(familyTree);
+        detailMessage = null;
+    } catch (err) {
+        handleFamilyError(err, "cancel the family request");
+    }
+    renderFamilyPage();
+}
+
+// ---- Family requests (receiving) ----
+// Shown in the Family page's header card, like friend requests on the
+// Friends page: who's asking, and as what, with Accept and Decline.
+
+let familyRequests = [];
+
+async function refreshFamilyRequests() {
+    if (!familyEls.requestList) return;
+    try {
+        familyRequests = await storageApi.listFamilyRequests();
+    } catch (err) {
+        familyRequests = [];
+    }
+    renderFamilyRequests();
+}
+
+function familyRequestRow(request) {
+    const item = el("li", "personRow familyRequestRow");
+    const avatar = el("img", "personAvatar");
+    avatar.src = request.from.photo_url || DEFAULT_MEMBER_PHOTO;
+    avatar.alt = "";
+    const text = el("div", "personText");
+    text.append(el("span", "personName", request.from.name));
+    // The relationship is what they'd be to the sender ("Mother"), so it's
+    // "their mother" to the person reading it.
+    const role = request.member.relationship ? ` as their ${request.member.relationship.toLowerCase()}` : "";
+    text.append(el("span", "personNote", `wants to add you to their family tree${role} ("${request.member.name}")`));
+
+    const actions = el("div", "personActions");
+    const accept = el("button", "primaryButton", "Accept");
+    const decline = el("button", "secondaryButton", "Decline");
+    accept.type = decline.type = "button";
+    accept.addEventListener("click", () => answerFamilyRequest(request, "accept", [accept, decline]));
+    decline.addEventListener("click", () => answerFamilyRequest(request, "decline", [accept, decline]));
+    actions.append(accept, decline);
+    item.append(avatar, text, actions);
+    return item;
+}
+
+function renderFamilyRequests() {
+    familyEls.requestList.innerHTML = "";
+    familyRequests.forEach((request) => familyEls.requestList.append(familyRequestRow(request)));
+    familyEls.requestCount.textContent = String(familyRequests.length);
+    familyEls.requestsBlock.classList.toggle("hidden", familyRequests.length === 0);
+}
+
+async function answerFamilyRequest(request, action, buttons) {
+    buttons.forEach((button) => (button.disabled = true));
+    try {
+        if (action === "accept") {
+            await storageApi.acceptFamilyRequest(request.request_id);
+            alert(`You've joined ${request.from.name}'s family tree, and you're now friends.`);
+            // A new friend (and family member) brings their stories with them.
+            if (typeof refreshFriendsUi === "function") refreshFriendsUi();
+            if (typeof refreshStoryFeeds === "function") refreshStoryFeeds();
+        } else {
+            await storageApi.declineFamilyRequest(request.request_id);
+        }
+    } catch (err) {
+        handleFamilyError(err, `${action} the family request`);
+    }
+    await refreshFamilyRequests();
 }
 
 // ---- Invitations (receiving) ----
@@ -1564,25 +1856,17 @@ async function acceptPendingInvite() {
 // ---- Wiring ----
 
 function wireFamilyPage() {
-    familyEls.addMember.addEventListener("click", () => openFamilyModal("friend"));
+    familyEls.addMember.addEventListener("click", () => openFamilyModal("search"));
     familyEls.invite.addEventListener("click", () => openFamilyModal("new", { requireEmail: true }));
-    familyEls.modeSwitch.addEventListener("click", () => {
-        // Keep what's been chosen so far. The name stays behind: in friend
-        // mode it's the friend's username.
-        openFamilyModal(familyModal?.mode === "friend" ? "new" : "friend", {
-            rowIndex: Number(familyEls.generation.value),
-            relationship: familyEls.relationship.value,
-            relatedToId: Number(familyEls.relatedTo.value),
-            relatedAs: familyEls.relatedAs.value,
-            derivedRelationship: familyModal?.derivedRelationship,
-        });
+    familyEls.searchBtn.addEventListener("click", runFamilySearch);
+    // Enter in the search box searches rather than submitting the dialog.
+    familyEls.searchInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        runFamilySearch();
     });
     familyEls.relatedTo.addEventListener("change", applyRelatedChoice);
     familyEls.relatedAs.addEventListener("change", applyRelatedChoice);
-    familyEls.friendSelect.addEventListener("change", () => {
-        const friend = familyFriends.find((candidate) => String(candidate.id) === familyEls.friendSelect.value);
-        if (friend) familyEls.name.value = friend.username;
-    });
     familyEls.form.addEventListener("submit", (event) => {
         event.preventDefault();
         submitFamilyModal();
@@ -1609,6 +1893,7 @@ function wireFamilyPage() {
     // photo, since the page was loaded.
     $("#family").click(() => {
         setTimeout(layoutFamilyTree, 0);
+        refreshFamilyRequests();
         if (familyLoaded && !familySaveInFlight && familyEls.modal.classList.contains("hidden")) {
             refreshFamilyTree().catch(() => {
                 // Keep showing what's there; the next edit will report a problem.
@@ -1622,6 +1907,7 @@ async function initFamilyTree() {
     renderFamilyPage();
     wireFamilyPage();
     offerPendingInvite();
+    refreshFamilyRequests();
 
     try {
         await refreshFamilyTree();

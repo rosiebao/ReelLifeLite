@@ -495,3 +495,235 @@ test("parents must be distinct people in the row directly above", async () => {
 });
 
 
+
+// ---- Family requests (Search member) ----
+
+// Owner's tree with one member to send a request for; returns that member.
+async function treeWithPlace(owner, name = "Mom", relationship = "Mother") {
+    const body = { rows: [{ members: [{ name, relationship }] }, { members: [{ name: "Me", is_self: true }] }] };
+    return (await request("PUT", "/family", { token: owner.token, body })).body.rows[0].members[0];
+}
+
+test("a family request is searched, sent, and accepted like a friend request", async () => {
+    const owner = await signupWithId("reqowner");
+    const mom = await signupWithId("reqmom");
+    const place = await treeWithPlace(owner);
+
+    const found = (await request("GET", "/family/search?q=reqm", { token: owner.token })).body;
+    assert.deepEqual(found.map((user) => [user.username, user.family_status]), [["reqmom", "none"]]);
+    assert.ok(!("email" in found[0]));
+
+    const sent = await request("POST", `/family/members/${place.member_id}/request`, {
+        token: owner.token,
+        body: { username: "reqmom" },
+    });
+    assert.equal(sent.status, 200);
+    assert.equal(sent.body.member.status, "invited");
+    assert.deepEqual(sent.body.member.requested_user, { id: mom.id, username: "reqmom" });
+    assert.equal((await request("GET", "/family/search?q=reqm", { token: owner.token })).body[0].family_status, "requested");
+
+    // Mom sees it waiting, with who it's from and as what.
+    const waiting = (await request("GET", "/family/requests", { token: mom.token })).body;
+    assert.equal(waiting.length, 1);
+    assert.equal(waiting[0].from.username, "reqowner");
+    assert.deepEqual(waiting[0].member, { name: "Mom", relationship: "Mother" });
+    assert.deepEqual((await request("GET", "/family/requests", { token: owner.token })).body, []);
+
+    const accepted = await request("POST", `/family/requests/${waiting[0].request_id}/accept`, { token: mom.token });
+    assert.equal(accepted.status, 200);
+    const after = (await request("GET", "/family", { token: owner.token })).body.rows[0].members[0];
+    assert.equal(after.status, "joined");
+    assert.deepEqual(after.linked_user, { id: mom.id, username: "reqmom" });
+    assert.equal(after.requested_user, null);
+    // Accepting makes them friends, as an invitation does.
+    const friends = (await request("GET", "/friends", { token: owner.token })).body;
+    assert.ok(friends.some((friend) => friend.username === "reqmom"));
+    assert.deepEqual((await request("GET", "/family/requests", { token: mom.token })).body, []);
+    assert.equal((await request("GET", "/family/search?q=reqm", { token: owner.token })).body[0].family_status, "in_tree");
+});
+
+test("a family request can be declined, or cancelled, and the place stays in the tree", async () => {
+    const owner = await signupWithId("decowner");
+    const aunt = await signupWithId("decaunt");
+    const place = await treeWithPlace(owner, "Aunt", "Aunt");
+    const send = () =>
+        request("POST", `/family/members/${place.member_id}/request`, { token: owner.token, body: { username: "decaunt" } });
+
+    await send();
+    const [waiting] = (await request("GET", "/family/requests", { token: aunt.token })).body;
+    assert.equal((await request("POST", `/family/requests/${waiting.request_id}/decline`, { token: aunt.token })).status, 200);
+    let member = (await request("GET", "/family", { token: owner.token })).body.rows[0].members[0];
+    assert.equal(member.name, "Aunt");
+    assert.equal(member.status, "not_invited");
+    assert.equal(member.requested_user, null);
+
+    // Sent again, then cancelled by the sender.
+    await send();
+    const cancelled = await request("DELETE", `/family/members/${place.member_id}/request`, { token: owner.token });
+    assert.equal(cancelled.status, 200);
+    assert.equal(cancelled.body.member.status, "not_invited");
+    assert.deepEqual((await request("GET", "/family/requests", { token: aunt.token })).body, []);
+    assert.equal((await request("DELETE", `/family/members/${place.member_id}/request`, { token: owner.token })).status, 404);
+
+    // A request survives other edits to the tree.
+    await send();
+    member = (await request("GET", "/family", { token: owner.token })).body.rows[0].members[0];
+    const edited = {
+        rows: [
+            { members: [{ member_id: member.member_id, name: "Auntie", relationship: "Aunt" }] },
+            { members: [{ name: "Me", is_self: true }] },
+        ],
+    };
+    const put = (await request("PUT", "/family", { token: owner.token, body: edited })).body.rows[0].members[0];
+    assert.equal(put.status, "invited");
+    assert.equal(put.requested_user.username, "decaunt");
+});
+
+
+test("family requests are refused when they don't make sense", async () => {
+    const owner = await signupWithId("badreqowner");
+    const other = await signupWithId("badreqother");
+    const stranger = await signupWithId("badreqstranger");
+    const place = await treeWithPlace(owner);
+    const twoPlaces = {
+        rows: [
+            { members: [{ member_id: place.member_id, name: "Mom" }, { name: "Dad" }] },
+            { members: [{ name: "Me", is_self: true }] },
+        ],
+    };
+    const tree = (await request("PUT", "/family", { token: owner.token, body: twoPlaces })).body;
+    const second = tree.rows[0].members[1];
+    const me = tree.rows[1].members[0];
+    const ask = (memberId, username, token = owner.token) =>
+        request("POST", `/family/members/${memberId}/request`, { token, body: { username } });
+
+    assert.equal((await ask(place.member_id, "")).status, 400);
+    assert.equal((await ask(place.member_id, "nobody-by-this-name")).status, 404);
+    assert.equal((await ask(place.member_id, "badreqowner")).status, 400); // yourself
+    assert.equal((await ask(me.member_id, "badreqother")).status, 400); // your own node
+    assert.equal((await ask(place.member_id, "badreqother", stranger.token)).status, 404); // not your tree
+
+    assert.equal((await ask(place.member_id, "badreqother")).status, 200);
+    // The same person can't be asked for two places at once.
+    assert.equal((await ask(second.member_id, "badreqother")).status, 409);
+
+    // Only the person asked can answer, and only once.
+    const [waiting] = (await request("GET", "/family/requests", { token: other.token })).body;
+    const answer = (token) => request("POST", `/family/requests/${waiting.request_id}/accept`, { token });
+    assert.equal((await answer(stranger.token)).status, 404);
+    assert.equal((await answer(other.token)).status, 200);
+    assert.equal((await answer(other.token)).status, 404);
+    // Now in the tree: can't be asked again, and the place can't be re-requested.
+    assert.equal((await ask(second.member_id, "badreqother")).status, 409);
+    assert.equal((await ask(place.member_id, "badreqstranger")).status, 409);
+
+    assert.equal((await request("GET", "/family/requests")).status, 401);
+    assert.equal((await request("GET", "/family/search?q=x")).status, 401);
+});
+
+
+// A member as the page sees it, minus what naturally differs (who they are,
+// when they were invited, and the email only an emailed invitation has).
+function standing(member) {
+    const { member_id, name, relationship, email, photo, photo_url, requested_user, linked_user, invited_at, ...rest } =
+        member;
+    return { ...rest, has_invited_at: Boolean(invited_at), linked: Boolean(linked_user) };
+}
+
+test("someone added with Search member is invited from the start, then joined like an email invitee", async () => {
+    const owner = await signupWithId("sameowner");
+    const byEmail = await signupWithId("sameemail");
+    const bySearch = await signupWithId("samesearch");
+
+    // Mom is invited by email. Dad is added with Search member: added and
+    // sent the request in one save, so he's never "not invited".
+    const put = await request("PUT", "/family", {
+        token: owner.token,
+        body: {
+            rows: [
+                { members: [{ name: "Mom", relationship: "Mother" }, { name: "Dad", relationship: "Father", request_username: "samesearch" }] },
+                { members: [{ name: "Me", is_self: true, parents: [0, 1] }] },
+            ],
+        },
+    });
+    assert.equal(put.status, 200);
+    let [mom, dad] = put.body.rows[0].members;
+    assert.equal(dad.status, "invited");
+    assert.deepEqual(dad.requested_user, { id: bySearch.id, username: "samesearch" });
+    const invite = await request("POST", `/family/members/${mom.member_id}/invite`, {
+        token: owner.token,
+        body: { email: "sameemail@example.com" },
+    });
+
+    // Waiting: both are invited, in the same way.
+    [mom, dad] = (await request("GET", "/family", { token: owner.token })).body.rows[0].members;
+    assert.deepEqual(standing(dad), standing(mom));
+    assert.equal(dad.status, "invited");
+
+    // Both accept.
+    await request("POST", `/family/invites/${invite.body.token}/accept`, { token: byEmail.token });
+    const [waiting] = (await request("GET", "/family/requests", { token: bySearch.token })).body;
+    await request("POST", `/family/requests/${waiting.request_id}/accept`, { token: bySearch.token });
+
+    // Joined: the same as each other, invitation date and all.
+    const tree = (await request("GET", "/family", { token: owner.token })).body;
+    [mom, dad] = tree.rows[0].members;
+    assert.deepEqual(standing(dad), standing(mom));
+    assert.equal(dad.status, "joined");
+    assert.deepEqual(dad.linked_user, { id: bySearch.id, username: "samesearch" });
+    assert.equal(dad.requested_user, null);
+    assert.deepEqual(tree.rows[1].members[0].parents, [0, 1]);
+
+    // And they get the same: friends with the owner, and family to them.
+    for (const relative of [byEmail, bySearch]) {
+        const friends = (await request("GET", "/friends", { token: relative.token })).body;
+        assert.deepEqual(friends.map((friend) => friend.username), ["sameowner"]);
+    }
+});
+
+test("a family request sent with the save is all or nothing", async () => {
+    const owner = await signupWithId("atomicowner");
+    await signupWithId("atomictaken");
+    const base = await treeWithPlace(owner);
+    await request("POST", `/family/members/${base.member_id}/request`, {
+        token: owner.token,
+        body: { username: "atomictaken" },
+    });
+    const before = (await request("GET", "/family", { token: owner.token })).body;
+
+    const withNew = (requestUsername) => ({
+        rows: [
+            { members: [{ member_id: base.member_id, name: "Mom" }, { name: "New", request_username: requestUsername }] },
+            { members: [{ name: "Me", is_self: true }] },
+        ],
+    });
+    // Nobody by that name; someone already asked for another place; yourself.
+    assert.equal((await request("PUT", "/family", { token: owner.token, body: withNew("nobody-here") })).status, 404);
+    assert.equal((await request("PUT", "/family", { token: owner.token, body: withNew("atomictaken") })).status, 409);
+    assert.equal((await request("PUT", "/family", { token: owner.token, body: withNew("atomicowner") })).status, 400);
+    // None of them added the new member.
+    assert.deepEqual((await request("GET", "/family", { token: owner.token })).body, before);
+});
+
+test("a cancelled or declined family request goes back to not invited", async () => {
+    const owner = await signupWithId("resetowner");
+    const relative = await signupWithId("resetrelative");
+    const put = await request("PUT", "/family", {
+        token: owner.token,
+        body: { rows: [{ members: [{ name: "Gran", request_username: "resetrelative" }] }, { members: [{ name: "Me", is_self: true }] }] },
+    });
+    const gran = put.body.rows[0].members[0];
+    assert.ok(gran.invited_at);
+
+    const cancelled = (await request("DELETE", `/family/members/${gran.member_id}/request`, { token: owner.token })).body;
+    assert.equal(cancelled.member.status, "not_invited");
+    assert.equal(cancelled.member.invited_at, null);
+
+    await request("POST", `/family/members/${gran.member_id}/request`, { token: owner.token, body: { username: "resetrelative" } });
+    const [waiting] = (await request("GET", "/family/requests", { token: relative.token })).body;
+    await request("POST", `/family/requests/${waiting.request_id}/decline`, { token: relative.token });
+    const after = (await request("GET", "/family", { token: owner.token })).body.rows[0].members[0];
+    assert.equal(after.status, "not_invited");
+    assert.equal(after.invited_at, null);
+});
+

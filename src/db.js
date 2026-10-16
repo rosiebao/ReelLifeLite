@@ -159,6 +159,11 @@ for (const [name, definition] of [
     ["linked_user_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL"],
     ["invite_token", "TEXT"],
     ["invited_at", "TEXT"],
+    // A family request sent to someone already on ReelLife ("Search member"):
+    // the account asked to take this place in the tree, until they accept
+    // (it becomes linked_user_id) or decline (it's cleared).
+    ["requested_user_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL"],
+    ["requested_at", "TEXT"],
 ]) {
     if (!familyMemberColumnsNow.some((column) => column.name === name)) {
         db.exec(`ALTER TABLE family_members ADD COLUMN ${name} ${definition}`);
@@ -166,6 +171,10 @@ for (const [name, definition] of [
 }
 db.exec(
     "CREATE UNIQUE INDEX IF NOT EXISTS family_members_invite_token ON family_members (invite_token) WHERE invite_token IS NOT NULL"
+);
+// Incoming family requests are looked up by who they're for.
+db.exec(
+    "CREATE INDEX IF NOT EXISTS family_members_requested ON family_members (requested_user_id) WHERE requested_user_id IS NOT NULL"
 );
 
 // Records that a user's tree has been set up, so the starting layout is only

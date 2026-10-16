@@ -148,8 +148,8 @@
                                 <div class="familyHeaderActions">
                                     <div class="familyHeaderAction">
                                         <button type="button" id="addFamilyMemberBtn" class="familyPrimaryButton">
-                                            <ion-icon name="person-add-outline" aria-hidden="true"></ion-icon>
-                                            <span>Add member</span>
+                                            <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                                            <span>Search member</span>
                                         </button>
                                         <span>Already on ReelLife</span>
                                     </div>
@@ -170,6 +170,14 @@
                                 </summary>
                                 <ul id="familyMemberList" class="familyMemberList"></ul>
                             </details>
+                            <!-- Family requests waiting on you (family.js); hidden when there are none. -->
+                            <div id="familyRequestsBlock" class="familyRequestsBlock hidden">
+                                <h3>
+                                    <ion-icon name="mail-unread-outline" aria-hidden="true"></ion-icon>
+                                    <span>Family requests · <span id="familyRequestCount">0</span></span>
+                                </h3>
+                                <ul id="familyRequestList" class="familyRequestList"></ul>
+                            </div>
                         </div>
                         <div class="familyGrid">
                             <div class="familyTreeCard">
@@ -439,13 +447,21 @@
                 <h3 id="familyModalTitle">Add a family member</h3>
                 <p id="familyModalIntro" class="familyModalIntro"></p>
                 <form id="familyMemberForm" class="publishForm" novalidate>
-                    <label id="familyFriendField" class="hidden">Friend
-                        <select id="familyFriendSelect"></select>
-                        <span id="familyFriendEmpty" class="familyModalHint hidden">
-                            None of your friends are left to add. Add friends on the Friends page, or invite
-                            someone new instead.
-                        </span>
-                    </label>
+                    <!-- Search member: find someone on ReelLife by username. Picking
+                         them fills in the name; saving sends them a family request. -->
+                    <div id="familySearchField" class="familySearchField hidden">
+                        <div class="friendSearchForm familySearchRow" role="search">
+                            <label class="friendSearchField">
+                                <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                                <input id="familySearchInput" type="search" placeholder="Username" autocomplete="off"
+                                    aria-label="Find someone on ReelLife by username" />
+                            </label>
+                            <button type="button" id="familySearchBtn">Search</button>
+                        </div>
+                        <ul id="familySearchResults" class="peopleList familySearchResults"></ul>
+                        <p id="familySearchEmpty" class="peopleEmpty hidden">No one by that name.</p>
+                        <p id="familySearchPicked" class="familySearchPicked hidden" aria-live="polite"></p>
+                    </div>
                     <label>Name
                         <input id="familyNameInput" type="text" maxlength="100" autocomplete="off" />
                     </label>
@@ -472,7 +488,6 @@
                         <input id="familyEmailInput" type="email" maxlength="254" placeholder="name@example.com"
                             autocomplete="off" />
                     </label>
-                    <button type="button" id="familyModalSwitch" class="familyLinkButton"></button>
                     <p id="familyModalError" class="publishError hidden" role="alert"></p>
                     <div class="modalActions">
                         <span class="modalSpacer"></span>

@@ -218,6 +218,34 @@ const storageApi = {
     return apiFetch(`/family/invites/${encodeURIComponent(token)}/accept`, { method: "POST" });
   },
 
+  // ---- Family requests (Search member) ----
+  // [{ id, username, photo_url, family_status: "none" | "requested" | "in_tree" }]
+  searchFamilyMembers(query) {
+    return apiFetch(`/family/search?q=${encodeURIComponent(query)}`);
+  },
+
+  // Asks `username` to take tree member `memberId`'s place -> { member }.
+  sendFamilyRequest(memberId, username) {
+    return apiFetch(`/family/members/${memberId}/request`, { method: "POST", body: { username } });
+  },
+
+  cancelFamilyRequest(memberId) {
+    return apiFetch(`/family/members/${memberId}/request`, { method: "DELETE" });
+  },
+
+  // The requests waiting on you: [{ request_id, requested_at, from, member }].
+  listFamilyRequests() {
+    return apiFetch("/family/requests");
+  },
+
+  acceptFamilyRequest(requestId) {
+    return apiFetch(`/family/requests/${requestId}/accept`, { method: "POST" });
+  },
+
+  declineFamilyRequest(requestId) {
+    return apiFetch(`/family/requests/${requestId}/decline`, { method: "POST" });
+  },
+
   // ---- Stories ----
   // publishStory both creates and updates: publishing a conversation that's
   // already been published edits its existing story (see ../stories.js).
@@ -257,6 +285,11 @@ const storageApi = {
 
   listFriendStories() {
     return apiFetch("/stories/friends");
+  },
+
+  // What one person has shared with you, newest first (the Family page).
+  listUserStories(userId) {
+    return apiFetch(`/users/${userId}/stories`);
   },
 
   listCommunityStories() {

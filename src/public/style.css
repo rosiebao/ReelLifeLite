@@ -1323,6 +1323,82 @@ main > section .familyHeaderText h2 {
     border: 1px solid #ebe6de;
     border-radius: 10px;
 }
+/* "Family requests · N": people asking you to join their tree. */
+.familyRequestsBlock {
+    margin-top: 12px;
+    padding: 12px 14px 4px;
+    border: 1px solid #f0d49b;
+    border-radius: 10px;
+    background-color: #fdf7ea;
+}
+.familyRequestsBlock.hidden {
+    display: none;
+}
+main > section .familyRequestsBlock h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    color: var(--navy);
+    font-size: 1rem;
+    font-weight: 800;
+}
+.familyRequestList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.familyRequestRow + .familyRequestRow {
+    border-top: 1px solid #f0dfba;
+}
+/* "wants to add you to their family tree as mother" -- let it wrap. */
+.familyRequestRow .personNote {
+    white-space: normal;
+}
+/* Search member: the search box and its results, inside the dialog. */
+.familySearchField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.familySearchField.hidden {
+    display: none;
+}
+.familyModal .familySearchRow {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+.familyModal .familySearchRow .friendSearchField {
+    flex-direction: row;
+    gap: 8px;
+}
+.familyModal .familySearchRow input {
+    padding: 11px 0;
+    border: none;
+}
+.familySearchResults {
+    max-height: 220px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+}
+.familySearchResults .personRow + .personRow {
+    border-top: 1px solid #ebe6de;
+}
+.familySearchResults .personRow .primaryButton.picked {
+    border-color: #1d6b3f;
+    background-color: #1d6b3f;
+}
+.familySearchPicked {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background-color: #e7f6ed;
+    color: #1d6b3f;
+    font-size: 0.85rem;
+}
+.familySearchPicked.hidden {
+    display: none;
+}
 .familyMembersBlock summary {
     display: flex;
     align-items: center;
@@ -1797,6 +1873,160 @@ main > section h3.familyDetailName {
     padding-top: 10px;
     border-top: 1px solid #ebe6de;
 }
+/* A relative on ReelLife: the photo beside their name, as in the stories
+   view, rather than above it. */
+.familyDetail.isMember .familyDetailHead {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    column-gap: 14px;
+    row-gap: 2px;
+    align-items: center;
+}
+.familyDetail.isMember .familyDetailPhoto {
+    grid-row: 1 / span 3;
+    width: 76px;
+    height: 76px;
+    margin-bottom: 0;
+}
+.familyDetail.isMember .familyDetailHead .familyStatus {
+    justify-self: start;
+    margin-top: 4px;
+}
+
+/* "Shared stories · 3": what a relative on ReelLife has shared with you. */
+.sharedStories {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.sharedStoriesHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+main > section .sharedStoriesTitle h4 {
+    color: var(--navy);
+    font-size: 1.1rem;
+    font-weight: 900;
+    white-space: nowrap;
+}
+.sharedStoriesTitle {
+    min-width: 0;
+}
+.sharedStoriesTitle p {
+    color: #667085;
+    font-size: 0.82rem;
+}
+.sharedStoriesSort {
+    flex: none;
+    max-width: 120px;
+    padding: 6px 4px;
+    border: 1px solid #d9d4cc;
+    border-radius: 8px;
+    background-color: #ffffff;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.82rem;
+}
+.sharedStoryList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.sharedStory {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+}
+.sharedStory + .sharedStory {
+    border-top: 1px solid #ebe6de;
+}
+.sharedStoryCover {
+    flex: none;
+    width: 96px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+}
+.sharedStoryCover .communityCover {
+    width: 96px;
+    height: 76px;
+    aspect-ratio: auto;
+    border-radius: 8px;
+    font-size: 1.6rem;
+}
+.sharedStoryCover:focus-visible,
+.sharedStoryRead:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+.sharedStoryBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.sharedStoryTop {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 4px;
+}
+main > section h4.sharedStoryTitle {
+    color: var(--navy);
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.sharedStoryTop .bookmarkButton {
+    width: 28px;
+    height: 28px;
+    margin: -4px -4px 0 0;
+    font-size: 1.1rem;
+}
+.sharedStoryDate {
+    color: #667085;
+    font-size: 0.78rem;
+}
+.sharedStorySummary {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #3c4558;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.sharedStoryRead {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 6px;
+    margin-top: 4px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+.sharedStoryRead:hover span {
+    text-decoration: underline;
+}
+.sharedStories .familyNote {
+    padding-top: 10px;
+    border-top: 1px solid #ebe6de;
+}
 
 /* The add / edit dialog and the invitation prompt. */
 .familyModal .modalCard {
@@ -1832,13 +2062,6 @@ main > section h3.familyDetailName {
     width: 100%;
     min-width: 0;
     text-overflow: ellipsis;
-}
-.familyModalHint {
-    color: #667085;
-    font-size: 0.85em;
-}
-.familyModal .familyLinkButton {
-    align-self: flex-start;
 }
 .familyModal .modalActions button[type="submit"],
 .familyModal .modalActions .primaryButton {

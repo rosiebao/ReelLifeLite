@@ -370,6 +370,25 @@ router.get("/conversations/:id/story", requireAuth, (req, res) => {
     res.json(storyJson(row, { includeContent: true }));
 });
 
+// ---- One person's stories ----
+
+// The stories one user has shared with the caller (the same rule as
+// everywhere else: public ones, ones shared with friends if the caller is a
+// friend, with family if they're family), newest first. The Family page
+// lists these under a relative who's on ReelLife. Your own id gives all of
+// yours. 404 for an account that doesn't exist.
+router.get("/users/:id/stories", requireAuth, (req, res) => {
+    const authorId = Number(req.params.id);
+    if (!Number.isInteger(authorId) || !db.prepare("SELECT 1 FROM users WHERE id = ?").get(authorId)) {
+        throw new ApiError(404, "User not found");
+    }
+    const filter = visibleStoryFilter(req.user.id);
+    const rows = db
+        .prepare(`${SELECT_STORY} WHERE s.user_id = ? AND ${filter.sql} ORDER BY s.created_at DESC`)
+        .all(authorId, ...filter.params);
+    res.json(feedJson(rows));
+});
+
 // ---- One story ----
 
 router.get("/stories/:id", requireAuth, (req, res) => {

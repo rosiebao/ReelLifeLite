@@ -548,3 +548,49 @@ test("story endpoints require a session", async () => {
         assert.equal((await request(method, urlPath)).status, 401, `${method} ${urlPath}`);
     }
 });
+
+test("one person's stories are only the ones they've shared with you", async () => {
+    const mom = await signupAndLogin("storymom");
+    const child = await signupAndLogin("storychild");
+    const stranger = await signupAndLogin("storystranger");
+
+    // The child joins Mom's tree by invitation, so they're family (and friends).
+    const put = await request("PUT", "/family", {
+        token: mom.token,
+        body: { rows: [{ members: [{ name: "Me", is_self: true }] }, { members: [{ name: "Kid", relationship: "Son" }] }] },
+    });
+    const kidId = put.body.rows[1].members[0].member_id;
+    const invite = await request("POST", `/family/members/${kidId}/invite`, { token: mom.token, body: {} });
+    await request("POST", `/family/invites/${invite.body.token}/accept`, { token: child.token });
+    const momId = (await request("GET", "/whoami", { token: mom.token })).body.id;
+
+    const publish = async (title, visibility) => {
+        const conversationId = await conversationWith(mom.token, [`${title} memory`]);
+        await request("POST", "/stories", { token: mom.token, body: { conversation_id: conversationId, title, visibility } });
+    };
+    await publish("Private", "private");
+    await publish("For family", ["family"]);
+    await publish("For friends", "friends");
+    await publish("For everyone", "public");
+
+    const titles = async (who) => {
+        const res = await request("GET", `/users/${momId}/stories`, { token: who.token });
+        assert.equal(res.status, 200);
+        return res.body.map((story) => story.title);
+    };
+    // Newest first; family and friends see what's shared with them, never the private one.
+    assert.deepEqual(await titles(child), ["For everyone", "For friends", "For family"]);
+    assert.deepEqual(await titles(stranger), ["For everyone"]);
+    // Mom sees all of her own.
+    assert.equal((await titles(mom)).length, 4);
+
+    // Cards only, like the other feeds.
+    const card = (await request("GET", `/users/${momId}/stories`, { token: child.token })).body[0];
+    assert.equal(card.content, undefined);
+    assert.ok(Array.isArray(card.photos));
+
+    assert.equal((await request("GET", "/users/999999/stories", { token: child.token })).status, 404);
+    assert.equal((await request("GET", "/users/abc/stories", { token: child.token })).status, 404);
+    assert.equal((await request("GET", `/users/${momId}/stories`)).status, 401);
+});
+

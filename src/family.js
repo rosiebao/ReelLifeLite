@@ -109,6 +109,9 @@ function parseFamilyTree(body) {
                 email: optionalEmail(member?.email),
                 linked_user_id: optionalId(member?.linked_user_id),
                 parents: member?.parents,
+                // Search member: invite this ReelLife account to take the
+                // place, in the same save that adds it (see matchMembers).
+                request_username: optionalText(member?.request_username, { field: "Username", max: 100 }),
             };
         });
     });
@@ -149,14 +152,15 @@ function parseFamilyTree(body) {
 function memberStatus(member) {
     if (member.is_self) return "self";
     if (member.linked_user_id) return "joined";
-    if (member.invite_token) return "invited";
+    // An emailed invitation, or a family request to someone on ReelLife.
+    if (member.invite_token || member.requested_user_id) return "invited";
     return "not_invited";
 }
 
 // The photo to draw: yours for your own node, the linked account's for someone
 // on ReelLife (when they have one), otherwise whatever the tree stored. The
 // invite token itself never goes out here -- only POST .../invite hands it to
-// the tree's owner.
+// the tree's owner. `requested_user` is who a pending family request went to.
 function memberJson(member, owner) {
     const accountPhoto = member.is_self ? owner?.photo : member.linked_photo;
     return {
@@ -168,18 +172,23 @@ function memberJson(member, owner) {
         relationship: member.relationship || "",
         email: member.email || "",
         status: memberStatus(member),
-        invited_at: member.invited_at || null,
+        invited_at: member.invited_at || member.requested_at || null,
         linked_user:
             member.linked_user_id && !member.is_self
                 ? { id: member.linked_user_id, username: member.linked_username }
+                : null,
+        requested_user:
+            member.requested_user_id && !member.linked_user_id
+                ? { id: member.requested_user_id, username: member.requested_username }
                 : null,
     };
 }
 
 const MEMBER_SELECT = `
-    SELECT m.*, u.username AS linked_username, u.photo AS linked_photo
+    SELECT m.*, u.username AS linked_username, u.photo AS linked_photo, q.username AS requested_username
     FROM family_members m
-    LEFT JOIN users u ON u.id = m.linked_user_id`;
+    LEFT JOIN users u ON u.id = m.linked_user_id
+    LEFT JOIN users q ON q.id = m.requested_user_id`;
 
 // The tree's parent links: Map(child member_id -> Set of parent member_ids).
 function parentLinksOf(userId) {
@@ -256,10 +265,13 @@ function existingMembersOf(userId) {
 }
 
 // Pairs every incoming member with the existing one it updates (or none, for
-// a new member), and checks each account link the tree asks for.
+// a new member), and checks each account link the tree asks for -- and each
+// family request (`request_username`, Search member) it carries.
 function matchMembers(userId, tree) {
     const existing = existingMembersOf(userId);
     const byId = new Map(existing.map((member) => [member.member_id, member]));
+    // Accounts already in the tree or asked, for checking requests against.
+    const accounts = treeAccountIds(userId);
 
     // Explicit ids first, so a position fallback can't take a member that is
     // claimed by id somewhere else in the tree.
@@ -271,6 +283,7 @@ function matchMembers(userId, tree) {
     }
 
     const linked = new Set();
+    const requestedAccounts = new Set();
     return tree.map((members, rowIndex) =>
         members.map((member, position) => {
             let current = member.member_id !== null ? byId.get(member.member_id) : null;
@@ -299,7 +312,35 @@ function matchMembers(userId, tree) {
                 linked.add(linkedUserId);
             }
 
-            return { ...member, member_id: current?.member_id ?? null, linked_user_id: linkedUserId };
+            // A family request sent with the save: the same checks as
+            // POST /family/members/:id/request, so a bad one saves nothing.
+            let requestedUserId;
+            if (member.request_username) {
+                if (member.is_self || linkedUserId !== null) {
+                    throw new ApiError(400, "Only someone not yet on ReelLife in your tree can be sent a family request");
+                }
+                const target = db.prepare("SELECT id, username FROM users WHERE username = ?").get(member.request_username);
+                if (!target) throw new ApiError(404, "User not found");
+                if (target.id === userId) throw new ApiError(400, "You're already in your tree");
+                if (accounts.some((row) => row.linked === target.id) || linked.has(target.id)) {
+                    throw new ApiError(409, `${target.username} is already in your tree`);
+                }
+                const askedElsewhere = accounts.some(
+                    (row) => row.requested === target.id && row.member_id !== current?.member_id
+                );
+                if (askedElsewhere || requestedAccounts.has(target.id)) {
+                    throw new ApiError(409, `You've already sent ${target.username} a family request`);
+                }
+                requestedAccounts.add(target.id);
+                requestedUserId = target.id;
+            }
+
+            return {
+                ...member,
+                member_id: current?.member_id ?? null,
+                linked_user_id: linkedUserId,
+                requested_user_id: requestedUserId,
+            };
         })
     );
 }
@@ -357,16 +398,23 @@ function saveFamilyTree(userId, tree) {
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     ).run(...values, now);
                     idGrid[rowIndex][position] = Number(info.lastInsertRowid);
-                    return;
+                } else {
+                    db.prepare(
+                        `UPDATE family_members
+                         SET row_id = ?, position = ?, name = ?, photo = ?, is_self = ?,
+                             relationship = ?, email = ?, linked_user_id = ?
+                         WHERE member_id = ?`
+                    ).run(...values, member.member_id);
+                    kept.add(member.member_id);
+                    idGrid[rowIndex][position] = member.member_id;
                 }
-                db.prepare(
-                    `UPDATE family_members
-                     SET row_id = ?, position = ?, name = ?, photo = ?, is_self = ?,
-                         relationship = ?, email = ?, linked_user_id = ?
-                     WHERE member_id = ?`
-                ).run(...values, member.member_id);
-                kept.add(member.member_id);
-                idGrid[rowIndex][position] = member.member_id;
+                // Invited from the moment they're added (Search member), the
+                // same as an emailed invitation.
+                if (member.requested_user_id !== undefined) {
+                    db.prepare(
+                        "UPDATE family_members SET requested_user_id = ?, requested_at = ?, invited_at = ? WHERE member_id = ?"
+                    ).run(member.requested_user_id, now, now, idGrid[rowIndex][position]);
+                }
             });
         });
 
@@ -523,6 +571,178 @@ router.post("/family/invites/:token/accept", requireAuth, (req, res) => {
         throw err;
     }
     res.json(invitationJson(invite));
+});
+
+// ---- Family requests (someone already on ReelLife) ----
+//
+// "Search member" finds an account by username and asks them to take a place
+// in your tree -- the same flow as a friend request: they see it waiting, and
+// accept or decline. The member is added to your tree straight away (shown as
+// "Invited"); accepting links their account to it and makes you friends, as
+// accepting an emailed invitation does. Declining (or the sender cancelling)
+// clears the request but leaves the member in the tree to invite again.
+
+// The pending requests waiting on `userId`, oldest first.
+function incomingFamilyRequests(userId) {
+    return db
+        .prepare(
+            `SELECT m.member_id, m.name, m.relationship, m.requested_at, r.user_id AS owner_id,
+                    u.username AS owner_username, u.first_name AS owner_first_name,
+                    u.last_name AS owner_last_name, u.photo AS owner_photo
+             FROM family_members m
+             JOIN family_rows r ON r.row_id = m.row_id
+             JOIN users u ON u.id = r.user_id
+             WHERE m.requested_user_id = ? AND m.linked_user_id IS NULL
+             ORDER BY m.requested_at, m.member_id`
+        )
+        .all(userId);
+}
+
+function familyRequestJson(request) {
+    return { request_id: request.member_id, requested_at: request.requested_at, ...invitationJson(request) };
+}
+
+function pendingFamilyRequest(memberId, userId) {
+    const request = incomingFamilyRequests(userId).find((row) => row.member_id === memberId);
+    // Someone else's request looks exactly like one that doesn't exist.
+    if (!request) throw new ApiError(404, "Family request not found");
+    return request;
+}
+
+// Who on ReelLife is already in your tree, or has a request from it.
+function treeAccountIds(userId) {
+    return db
+        .prepare(
+            `SELECT m.member_id, m.linked_user_id AS linked, m.requested_user_id AS requested
+             FROM family_members m JOIN family_rows r ON r.row_id = m.row_id
+             WHERE r.user_id = ?`
+        )
+        .all(userId);
+}
+
+// A username containing % or _ matches them literally, not as wildcards.
+function escapeLike(value) {
+    return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+// People to add, by username, each with where they stand with your tree:
+// "none", "requested" (a request is waiting on them) or "in_tree". Like the
+// friends search: a substring of the username, never email.
+router.get("/family/search", requireAuth, (req, res) => {
+    const query = String(req.query.q || "").trim();
+    if (!query) {
+        res.json([]);
+        return;
+    }
+    const rows = db
+        .prepare(
+            `SELECT id, username, photo FROM users
+             WHERE id != ? AND username LIKE ? ESCAPE '\\'
+             ORDER BY username LIMIT 20`
+        )
+        .all(req.user.id, `%${escapeLike(query)}%`);
+    const tree = treeAccountIds(req.user.id);
+    res.json(
+        rows.map((user) => {
+            let familyStatus = "none";
+            if (tree.some((row) => row.linked === user.id)) familyStatus = "in_tree";
+            else if (tree.some((row) => row.requested === user.id)) familyStatus = "requested";
+            return { id: user.id, username: user.username, photo_url: photoUrl(user.photo), family_status: familyStatus };
+        })
+    );
+});
+
+// Asks someone on ReelLife to take a place in your tree. The member (saved,
+// not you, not yet on ReelLife) is the place the request is for -- the page
+// adds them first, with their name, generation and relationship.
+// {"username"} -> { member }
+router.post("/family/members/:id/request", requireAuth, (req, res) => {
+    const member = ownedMember(req.user.id, Number(req.params.id));
+    if (member.is_self) throw new ApiError(400, "You can't send a family request to yourself");
+    if (member.linked_user_id) throw new ApiError(409, `${member.name} is already on ReelLife`);
+
+    const username = String(req.body?.username || "").trim();
+    if (!username) throw new ApiError(400, "Username cannot be empty");
+    const target = db.prepare("SELECT id, username FROM users WHERE username = ?").get(username);
+    if (!target) throw new ApiError(404, "User not found");
+    if (target.id === req.user.id) throw new ApiError(400, "You're already in your tree");
+
+    const tree = treeAccountIds(req.user.id);
+    if (tree.some((row) => row.linked === target.id)) {
+        throw new ApiError(409, `${target.username} is already in your tree`);
+    }
+    if (tree.some((row) => row.requested === target.id && row.member_id !== member.member_id)) {
+        throw new ApiError(409, `You've already sent ${target.username} a family request`);
+    }
+
+    // Recorded as an invitation as well (invited_at), the same as emailing one,
+    // so the member reads "Invited on ..." either way, and keeps the date once
+    // they've joined.
+    const now = new Date().toISOString();
+    db.prepare(
+        "UPDATE family_members SET requested_user_id = ?, requested_at = ?, invited_at = ? WHERE member_id = ?"
+    ).run(target.id, now, now, member.member_id);
+    const owner = db.prepare("SELECT photo FROM users WHERE id = ?").get(req.user.id);
+    res.json({ member: memberJson(ownedMember(req.user.id, member.member_id), owner) });
+});
+
+// Cancels a request you sent; the member stays in your tree.
+router.delete("/family/members/:id/request", requireAuth, (req, res) => {
+    const member = ownedMember(req.user.id, Number(req.params.id));
+    if (!member.requested_user_id || member.linked_user_id) throw new ApiError(404, "No family request to cancel");
+    db.prepare(
+        `UPDATE family_members SET requested_user_id = NULL, requested_at = NULL,
+            invited_at = CASE WHEN invite_token IS NULL THEN NULL ELSE invited_at END WHERE member_id = ?`
+    ).run(
+        member.member_id
+    );
+    const owner = db.prepare("SELECT photo FROM users WHERE id = ?").get(req.user.id);
+    res.json({ member: memberJson(ownedMember(req.user.id, member.member_id), owner) });
+});
+
+// The family requests waiting on you.
+router.get("/family/requests", requireAuth, (req, res) => {
+    res.json(incomingFamilyRequests(req.user.id).map(familyRequestJson));
+});
+
+// Takes the place in their tree (so it shows your photo and "ReelLife
+// member") and makes the two of you friends, like accepting an invitation.
+router.post("/family/requests/:id/accept", requireAuth, (req, res) => {
+    const request = pendingFamilyRequest(Number(req.params.id), req.user.id);
+    const alreadyIn = db
+        .prepare(
+            `SELECT 1 FROM family_members m JOIN family_rows r ON r.row_id = m.row_id
+             WHERE r.user_id = ? AND m.linked_user_id = ?`
+        )
+        .get(request.owner_id, req.user.id);
+    if (alreadyIn) throw new ApiError(409, `You're already in ${request.owner_username}'s family tree`);
+
+    const now = new Date().toISOString();
+    db.exec("BEGIN");
+    try {
+        // Linked, and any emailed invitation for the same place is used up.
+        db.prepare(
+            `UPDATE family_members SET linked_user_id = ?, requested_user_id = NULL, requested_at = NULL,
+                invite_token = NULL WHERE member_id = ?`
+        ).run(req.user.id, request.member_id);
+        befriend(req.user.id, request.owner_id, now);
+        db.exec("COMMIT");
+    } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+    }
+    res.json(familyRequestJson(request));
+});
+
+router.post("/family/requests/:id/decline", requireAuth, (req, res) => {
+    const request = pendingFamilyRequest(Number(req.params.id), req.user.id);
+    db.prepare(
+        `UPDATE family_members SET requested_user_id = NULL, requested_at = NULL,
+            invited_at = CASE WHEN invite_token IS NULL THEN NULL ELSE invited_at END WHERE member_id = ?`
+    ).run(
+        request.member_id
+    );
+    res.json({ ok: true });
 });
 
 module.exports = { router, getFamilyTree, familyIdsOf };

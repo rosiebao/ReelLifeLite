@@ -237,6 +237,11 @@ so it's stored alone; `private` can't be combined with anything.
   `public` from either (not the caller's own)
 - `GET /stories/community` -- every `public` story, newest first, the
   caller's own included
+- `GET /users/{id}/stories` -- one person's stories that the caller may read
+  (the same rule as `GET /stories/{id}`: public, or shared with friends or
+  family the caller belongs to), newest first; all of them for your own id.
+  The Family page lists these under a relative on ReelLife. `404` for an
+  account that doesn't exist
 - `GET /stories/{id}` -- one story with its `content`, plus `is_author` and
   `author_is_friend`; 404 if the caller isn't allowed to read it
 - `PATCH /stories/{id}` -- edit any subset of the fields above (this is how
@@ -329,6 +334,31 @@ account's for someone on ReelLife), `status` (`self`, `joined`, `invited`,
 - `POST /family/invites/{token}/accept` -- links your account to that member
   and makes the two of you friends. The link is then used up.
 
+Family requests are for someone already on ReelLife ("Search member"), and
+work like friend requests. A request is an invitation like an emailed one:
+while it's waiting the member's `status` is `invited` (with `invited_at`, and
+`requested_user` as `{id, username}`), and once it's accepted they're
+`joined`, the same as anyone who accepted an emailed invitation. The page
+sends it in the same `PUT /family` that adds the member -- a new member with
+`request_username` -- so they're invited from the moment they appear, and a
+bad username saves nothing. A request survives other saves of the tree;
+cancelled or declined, the member goes back to `not_invited`.
+
+- `GET /family/search?q=` -- usernames containing `q` (never you, never
+  email), each with `photo_url` and `family_status`: `none`, `requested` or
+  `in_tree`
+- `POST /family/members/{id}/request` -- `{"username"}` -> `{"member"}`, for a
+  member already in the tree.
+  `409` if they're already in your tree, or already asked for another place;
+  `400` for yourself or your own node
+- `DELETE /family/members/{id}/request` -- cancel it; the member stays
+- `GET /family/requests` -- the requests waiting on you: `request_id`,
+  `requested_at`, `from` and `member` (as for an invitation)
+- `POST /family/requests/{id}/accept` -- links your account to that member and
+  makes the two of you friends, like accepting an invitation
+- `POST /family/requests/{id}/decline` -- clears it; the member stays in their
+  tree without you
+
 ### Friends
 
 One row per request, in the direction it was sent, flipped to `accepted` when
@@ -356,11 +386,15 @@ the other side agrees. Declining deletes the row, so the pair can try again.
 - `public/family.js` -- the Family tab: the tree (each generation on one line,
   however many people are in it -- the tree scrolls left and right -- with
   + Member / − Member / + Layer / × Layer pinned beside it), the panel for the
-  selected person (invite by email or link), Add member (a friend already on
-  ReelLife) and Invite family (someone new). Adding asks who they're related
+  selected person (invite by email or link), Search member (find someone on
+  ReelLife by username and send them a family request, which they accept or
+  decline from the "Family requests" list on their own Family page, like a
+  friend request) and Invite family (by email). Adding asks who they're related
   to (the selected person to start with) and how, and works out their
   generation, relationship to you, parent links and place in the row from
-  that. Lines join only parents to their children. Also offers an invitation link
+  that. Lines join only parents to their children. Selecting a relative who's
+  on ReelLife shows the stories they've shared with you (newest or oldest
+  first), each opening in the story reader. Also offers an invitation link
   that was opened (`?invite=`; `authGuard.js` keeps it across signing in)
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
   topic, start an interview, answer (typed, or out loud with 🎤 / ✋
