@@ -232,8 +232,9 @@ friends, the Friends tab) or `public` (everyone, the Community tab).
   `author_is_friend`; 404 if the caller isn't allowed to read it
 - `PATCH /stories/{id}` -- edit any subset of the fields above (this is how
   visibility gets changed); author only
-- `DELETE /stories/{id}` -- unpublish; the conversation is untouched and can
-  be published again
+- `DELETE /stories/{id}` -- delete (unpublish) a story for good; the
+  conversation is untouched and can be published again. Also works for a
+  story whose conversation was deleted. Author only (404 otherwise)
 - `GET /conversations/{id}/story` -- the story that conversation was
   published as (with `content`), or `204` if it hasn't been
 
@@ -319,10 +320,13 @@ the other side agrees. Declining deletes the row, so the pair can try again.
   generation and relationship to you from that. Also offers an invitation link
   that was opened (`?invite=`; `authGuard.js` keeps it across signing in)
 - `public/index.html`'s "Story" tab + `testChat.js` -- the interview: pick a
-  mode, start an interview, answer (typed or out loud), skip a question, and
+  topic, start an interview, answer (typed, or out loud with 🎤 / ✋
+  Hands-free), skip a question, and
   "End" to have it written up as a story in the publish dialog, all through `/interview`.
   An interview is deleted with the trash button beside End, or on its row
-  under "Your Interviews"
+  under "Your Interviews". A published story is deleted (`DELETE
+  /stories/{id}`, `stories.js`) the same way: the trash button beside "Edit
+  story" in the reader, or on its row under "Your Stories"
 - `public/voiceInput.js` -- answering out loud with the browser's speech
   recognition (Chrome, Edge, Safari); dictates into the answer box with a live
   caption, and the mic button hides where it isn't supported. Restarts itself

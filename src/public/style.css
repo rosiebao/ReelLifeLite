@@ -528,6 +528,16 @@ main > section .storyReaderHeading h3 {
     color: var(--navy);
     overflow-wrap: anywhere;
 }
+.storyReaderActions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+}
+.deleteStoryButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
 .storyReaderEdit {
     display: flex;
     align-items: center;
@@ -682,8 +692,7 @@ body.restoringPage main > section {
     font-size: 0.9rem;
     color: var(--navy);
 }
-#interviewModeSelect,
-#answerModeSelect {
+#interviewModeSelect {
     padding: 10px;
     border: 1px solid #d0d5dd;
     border-radius: 10px;
@@ -705,8 +714,10 @@ body.restoringPage main > section {
 .endButton:hover {
     background-color: #fef2f2;
 }
-/* Beside End: deletes the open interview (testChat.js). */
-.deleteInterviewButton {
+/* Beside End: deletes the open interview (testChat.js). The story reader's
+   trash button, beside "Edit story", looks the same (stories.js). */
+.deleteInterviewButton,
+.deleteStoryButton {
     display: inline-flex;
     align-items: center;
     padding: 8px;
@@ -718,7 +729,9 @@ body.restoringPage main > section {
     cursor: pointer;
 }
 .deleteInterviewButton:hover,
-.deleteInterviewButton:focus-visible {
+.deleteInterviewButton:focus-visible,
+.deleteStoryButton:hover,
+.deleteStoryButton:focus-visible {
     background-color: #fef2f2;
     color: #ef4444;
 }

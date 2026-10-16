@@ -369,6 +369,30 @@ test("unpublishing removes the story but keeps the conversation", async () => {
     assert.equal(again.status, 201);
 });
 
+test("a story whose interview was deleted can still be deleted", async () => {
+    const ada = await signupAndLogin("orphanauthor");
+    const conversationId = await conversationWith(ada.token, ["a memory"]);
+    const storyId = (
+        await request("POST", "/stories", {
+            token: ada.token,
+            body: { conversation_id: conversationId, title: "Left behind", visibility: "public" },
+        })
+    ).body.story_id;
+    assert.equal((await request("DELETE", `/conversations/${conversationId}`, { token: ada.token })).status, 200);
+    assert.equal((await request("GET", `/stories/${storyId}`, { token: ada.token })).body.conversation_id, null);
+
+    assert.equal((await request("DELETE", `/stories/${storyId}`)).status, 401);
+    assert.equal((await request("DELETE", `/stories/${storyId}`, { token: ada.token })).status, 200);
+
+    assert.equal((await request("GET", `/stories/${storyId}`, { token: ada.token })).status, 404);
+    const mine = (await request("GET", "/stories/mine", { token: ada.token })).body;
+    assert.ok(!mine.some((story) => story.story_id === storyId));
+    const community = (await request("GET", "/stories/community", { token: ada.token })).body;
+    assert.ok(!community.some((story) => story.story_id === storyId));
+    // Deleting again is a 404, as for any story that isn't there.
+    assert.equal((await request("DELETE", `/stories/${storyId}`, { token: ada.token })).status, 404);
+});
+
 test("a conversation reports the story it was published as", async () => {
     const ada = await signupAndLogin("lookup");
     const stranger = await signupAndLogin("lookupstranger");

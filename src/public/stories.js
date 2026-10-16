@@ -159,6 +159,7 @@ const storyReaderTitle = document.querySelector("#storyReaderTitle");
 const storyReaderMeta = document.querySelector("#storyReaderMeta");
 const storyReaderContent = document.querySelector("#storyReaderContent");
 const storyReaderEditBtn = document.querySelector("#storyReaderEditBtn");
+const storyReaderDeleteBtn = document.querySelector("#storyReaderDeleteBtn");
 
 // The interview a story came from, if it's still in the list.
 function storyConversation(story) {
@@ -188,6 +189,8 @@ function renderMyStoryDrawer() {
                 meta: storyMeta(story),
                 selected: storyState.tabReaderStory?.story_id === story.story_id,
                 onOpen: () => openTabStoryReader(story.story_id),
+                onDelete: () => deleteMyStory(story),
+                deleteLabel: `Delete ${story.title}`,
             })
         );
     }
@@ -262,6 +265,44 @@ storyReaderEditBtn.addEventListener("click", () => {
     if (story?.conversation_id === null || story?.conversation_id === undefined) return;
     openPublishModal(story.conversation_id);
 });
+
+// Deletes one of your stories for good (after asking), from its row under
+// "Your Stories" or the trash button in the reader -- the same way an
+// interview is deleted (testChat.js deleteInterview). The interview it came
+// from is left alone, so it can be published again; with no interview behind
+// it the story can't be written again, and the question says so.
+async function deleteMyStory(story) {
+    if (!story) return;
+    const keeps =
+        story.conversation_id !== null && story.conversation_id !== undefined
+            ? "\n\nThe interview it came from stays under Your Interviews, so you can publish it again."
+            : "\n\nThe interview it came from was deleted, so it can't be published again.";
+    if (!confirm(`Delete "${story.title}"? Nobody will be able to read it any more.${keeps}`)) return;
+
+    storyReaderDeleteBtn.disabled = true;
+    try {
+        await storageApi.deleteStory(story.story_id);
+    } catch (err) {
+        if (err.status === 401) return;
+        // Already gone (deleted in another tab): carry on and drop it here too.
+        if (err.status !== 404) {
+            alert(`Couldn't delete the story: ${errorMessage(err)}`);
+            return;
+        }
+    } finally {
+        storyReaderDeleteBtn.disabled = false;
+    }
+
+    // A bookmark on it would only point at nothing now.
+    setStorySaved(story.story_id, false);
+    // refreshMyStories closes the reader if it was showing this story.
+    refreshStoryFeeds();
+    if (testState.selectedConversationId !== null && testState.selectedConversationId === story.conversation_id) {
+        refreshPublishStatus(story.conversation_id);
+    }
+}
+
+storyReaderDeleteBtn.addEventListener("click", () => deleteMyStory(storyState.tabReaderStory));
 
 // The Friends feed as the server last sent it (newest first), and which of the
 // "All stories / Saved" chips is picked, so switching chips -- or

@@ -207,12 +207,6 @@
                                         <option value="Lessons">Life Lessons</option>
                                     </select>
                                 </label>
-                                <label class="interviewModeLabel">Answer mode
-                                    <select id="answerModeSelect">
-                                        <option value="speak">Speak</option>
-                                        <option value="type">Type</option>
-                                    </select>
-                                </label>
                                 <button type="button" id="newTestConversationBtn">
                                     <ion-icon id="startInterviewIcon" name="mic-outline" aria-hidden="true"></ion-icon>
                                     Start interview
@@ -253,10 +247,16 @@
                                 <p id="storyReaderTopic" class="storyReaderTopic"></p>
                                 <div class="storyReaderHeading">
                                     <h3 id="storyReaderTitle"></h3>
-                                    <button type="button" id="storyReaderEditBtn" class="storyReaderEdit">
-                                        <ion-icon name="pencil-outline" aria-hidden="true"></ion-icon>
-                                        Edit story
-                                    </button>
+                                    <div class="storyReaderActions">
+                                        <button type="button" id="storyReaderEditBtn" class="storyReaderEdit">
+                                            <ion-icon name="pencil-outline" aria-hidden="true"></ion-icon>
+                                            Edit story
+                                        </button>
+                                        <button type="button" id="storyReaderDeleteBtn" class="deleteStoryButton"
+                                            title="Delete this story" aria-label="Delete this story">
+                                            <ion-icon name="trash-outline" aria-hidden="true"></ion-icon>
+                                        </button>
+                                    </div>
                                 </div>
                                 <p id="storyReaderMeta" class="storyReaderMeta"></p>
                                 <div id="storyReaderContent" class="storyReaderContent"></div>

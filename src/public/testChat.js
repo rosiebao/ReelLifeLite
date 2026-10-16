@@ -270,10 +270,8 @@ newTestConversationBtn.addEventListener("click", async () => {
     }
     await refreshTestConversations();
     await selectTestConversation(conversationId);
-    // The "Answer mode" picker decides how this interview is answered: Speak
-    // opens the microphone, Type doesn't. A spoken interview keeps the ✋
-    // Hands-free setting as it was last left.
-    setHandsFree(answerModeSelect.value !== "type" && savedHandsFree());
+    // A new interview keeps the ✋ Hands-free setting as it was last left.
+    setHandsFree(savedHandsFree());
 
     try {
         const { question } = await withInterviewer(conversationId, () =>
@@ -283,8 +281,10 @@ newTestConversationBtn.addEventListener("click", async () => {
         await refreshTestConversations();
         if (stillSelected(conversationId)) {
             showQuestion(question);
-            // The mic waits out the question being read aloud (see speaker).
-            if (answerModeSelect.value !== "type") startMicrophone();
+            // Where the browser can listen, the mic opens (it waits out the
+            // question being read aloud, see speaker); the answer box takes
+            // typing either way, and 🎤 turns the mic off.
+            if (dictation) startMicrophone();
             else testMessageInput.focus();
         }
     } catch (err) {
@@ -377,7 +377,7 @@ function closeTestConversation() {
 
 // Deletes an interview for good (after asking): every question and answer,
 // the drafts written from it and its transcript. A story published from it
-// stays up -- the question says so -- and is unpublished on its own. Not while
+// stays up -- the question says so -- and is deleted on its own. Not while
 // the interviewer is working on this interview, so a reply can't land in one
 // that's gone.
 async function deleteInterview(conversationId) {
@@ -391,7 +391,7 @@ async function deleteInterview(conversationId) {
 
     const published = (storyState.myStories || []).some((story) => story.conversation_id === conversationId);
     const keeps = published
-        ? "\n\nThe story you published from it stays up. Unpublish it from Your Stories if you want it gone too."
+        ? "\n\nThe story you published from it stays up. Delete it from Your Stories if you want it gone too."
         : "";
     if (!confirm(`Delete "${conversationTitle(conversation)}"? All of its questions and answers will be gone for good.${keeps}`)) {
         return;
@@ -519,8 +519,7 @@ endInterviewBtn.addEventListener("click", async () => {
 
 // The ✋ Hands-free setting is the storyteller's choice: remembered on this
 // device (like the voice toggle) and carried into every interview -- a new
-// one, the next answer, and after End -- until the ✋ button or picking
-// "Type" turns it off.
+// one, the next answer, and after End -- until the ✋ button turns it off.
 const HANDS_FREE_KEY = "reellife_hands_free";
 let handsFree = false;
 // A hands-free answer that finished while the interviewer was busy.
@@ -549,42 +548,19 @@ function setHandsFree(on, { remember = false } = {}) {
     renderMicHint();
 }
 
-// ---- Answer mode (the Story Companion card) ----
-
-// Remembered on this device, like the voice toggle (voiceOutput.js). Just
-// "speak" or "type"; whether speaking is hands-free is the ✋ setting above.
-const ANSWER_MODE_KEY = "reellife_answer_mode";
-const answerModeSelect = document.querySelector("#answerModeSelect");
-
-function saveAnswerMode() {
-    try {
-        localStorage.setItem(ANSWER_MODE_KEY, answerModeSelect.value);
-    } catch (err) {
-        // Storage blocked (private mode): just don't remember it.
-    }
-}
-
+// The Story Companion card used to have an "Answer mode" picker (Speak /
+// Type); speaking and typing are now both always there (🎤 and the answer
+// box). Its old saved choice is cleared, and the even older "Speak
+// hands-free" choice still carries over as ✋ Hands-free on.
+const OLD_ANSWER_MODE_KEY = "reellife_answer_mode";
 try {
-    let saved = localStorage.getItem(ANSWER_MODE_KEY);
-    if (saved === "handsFree") {
-        // The old "Speak hands-free" choice: speaking, with ✋ Hands-free on.
-        saved = "speak";
-        localStorage.setItem(ANSWER_MODE_KEY, saved);
-        if (localStorage.getItem(HANDS_FREE_KEY) === null) localStorage.setItem(HANDS_FREE_KEY, "on");
+    if (localStorage.getItem(OLD_ANSWER_MODE_KEY) === "handsFree" && localStorage.getItem(HANDS_FREE_KEY) === null) {
+        localStorage.setItem(HANDS_FREE_KEY, "on");
     }
-    if ([...answerModeSelect.options].some((option) => option.value === saved)) answerModeSelect.value = saved;
+    localStorage.removeItem(OLD_ANSWER_MODE_KEY);
 } catch (err) {
-    // Keep the default.
+    // Storage blocked (private mode): nothing was saved to clear.
 }
-
-answerModeSelect.addEventListener("change", () => {
-    saveAnswerMode();
-    // Switching to typing mid-interview turns the microphone off for it.
-    if (answerModeSelect.value === "type") {
-        setHandsFree(false, { remember: true });
-        dictation?.stop();
-    }
-});
 
 const MIC_PROBLEM_HINTS = {
     offline: "You're offline -- listening picks up again when you're back online.",
@@ -683,25 +659,16 @@ if (dictation) {
 
     handsFreeBtn.addEventListener("click", () => {
         setHandsFree(!handsFree, { remember: true });
-        if (handsFree) {
-            startMicrophone();
-            // Hands-free is a way of speaking, so the picker follows along.
-            if (answerModeSelect.value !== "speak") {
-                answerModeSelect.value = "speak";
-                saveAnswerMode();
-            }
-        }
+        if (handsFree) startMicrophone();
     });
 } else {
+    // No speech recognition in this browser: answers are typed.
     micBtn.classList.add("hidden");
     handsFreeBtn.classList.add("hidden");
-    // No speech recognition in this browser: typing is the only answer mode.
-    for (const option of answerModeSelect.options) option.disabled = option.value !== "type";
-    answerModeSelect.value = "type";
 }
 
-// Show the ✋ button as it was last left (off while "Type" is picked).
-setHandsFree(answerModeSelect.value !== "type" && savedHandsFree());
+// Show the ✋ button as it was last left.
+setHandsFree(savedHandsFree());
 
 if (speaker) {
     voiceToggleBtn.addEventListener("click", () => {
